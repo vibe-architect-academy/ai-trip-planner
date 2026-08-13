@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+/* The itinerary comes back as markdown-ish text and gets turned into these
+   elements. Styling them here keeps the page component readable. */
+@layer components {
+  .prose-trip h2 {
+    @apply mt-6 first:mt-0 mb-2 text-lg font-semibold text-indigo-700 dark:text-indigo-400;
+  }
+  .prose-trip ul {
+    @apply list-disc pl-5 space-y-1.5;
+  }
+  .prose-trip li {
+    @apply text-slate-700 dark:text-slate-300;
+  }
+  .prose-trip strong {
+    @apply font-semibold text-slate-900 dark:text-slate-100;
+  }
+}
+
+@utility focus-ring {
+  @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 dark:focus-visible:ring-indigo-400 dark:focus-visible:ring-offset-slate-900;
+}
