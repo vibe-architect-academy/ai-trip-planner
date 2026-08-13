@@ -24,24 +24,59 @@ export default function Home() {
     setError("");
     setTrip(null);
 
+    const asked = destination.trim() || "Kyoto";
+
     try {
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          destination: destination.trim() || "Kyoto",
-          days: Number(days) || 3,
-        }),
+        body: JSON.stringify({ destination: asked, days: Number(days) || 3 }),
       });
 
+      // Anything rejected before the stream starts still answers in one piece.
       // A server that fell over hard answers with HTML, not JSON, and parsing
-      // that is its own crash. Read the body defensively.
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
+      // that is its own crash, so read the body defensively.
+      if (!response.ok || !response.body) {
+        const data = await response.json().catch(() => ({}));
         setError(data.error ?? "Something went wrong. Try again.");
-      } else {
-        setTrip({ destination: data.destination, itinerary: data.itinerary });
+        return;
+      }
+
+      // From here the answer arrives a few words at a time. Each line is one
+      // JSON object, and a network chunk can end mid-line, so hold the
+      // fragment back until the rest of it turns up.
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let itinerary = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const raw of lines) {
+          if (!raw.trim()) continue;
+          let event: { text?: string; error?: string };
+          try {
+            event = JSON.parse(raw);
+          } catch {
+            continue;
+          }
+          if (event.error) {
+            setError(event.error);
+            continue;
+          }
+          if (event.text) {
+            itinerary += event.text;
+            // Hand it over on every chunk. This is the whole point: the days
+            // fill in while the model is still writing them.
+            setTrip({ destination: asked, itinerary });
+          }
+        }
       }
     } catch {
       // fetch only rejects when the request never completed: the connection

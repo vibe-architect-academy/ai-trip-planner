@@ -3,16 +3,27 @@
  *
  * This file never runs in the browser. It runs on the server, which is the
  * only reason GEMINI_API_KEY is safe to read here. The browser sends a
- * destination and a number of days, and gets back an itinerary. It has no
- * idea which AI produced it, or that there is a key involved at all.
+ * destination and a number of days, and gets the itinerary back as it is
+ * written, a few words at a time.
  */
 
 import { logError, logInfo } from "@/lib/log";
+import { readSseData, geminiTextFrom } from "@/lib/sse";
 
 const MODEL = "gemini-2.5-flash";
 
-/** How long to wait on the AI before giving up and telling the user so. */
-const UPSTREAM_TIMEOUT_MS = 15_000;
+/**
+ * How long this function is allowed to run before the platform kills it.
+ *
+ * A seven day itinerary can take the better part of a minute. The Vercel
+ * default is far shorter than that, and a request that gets cut off halfway
+ * looks exactly like a bug to whoever was waiting. Two minutes is comfortable
+ * headroom, not a target.
+ */
+export const maxDuration = 120;
+
+/** How long to wait for the AI to say its first word before giving up. */
+const UPSTREAM_TIMEOUT_MS = 20_000;
 
 function buildPrompt(destination: string, days: number): string {
   return [
@@ -24,15 +35,16 @@ function buildPrompt(destination: string, days: number): string {
   ].join(" ");
 }
 
+/** One line of newline-delimited JSON. The browser reads these as they land. */
+function line(value: Record<string, unknown>): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(value) + "\n");
+}
+
 export async function POST(request: Request) {
   let destination = "";
   let days = 0;
 
   try {
-    // Validate what the caller sent before anything else. A bad request is the
-    // caller's problem whether or not the server happens to be configured, and
-    // answering 500 to a request that was never valid just sends people hunting
-    // for a server fault that does not exist.
     let body: { destination?: unknown; days?: unknown };
     try {
       body = await request.json();
@@ -62,7 +74,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
+    const url =
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}` +
+      `:streamGenerateContent?alt=sse&key=${apiKey}`;
 
     let upstream: Response;
     try {
@@ -75,14 +89,14 @@ export async function POST(request: Request) {
           generationConfig: {
             temperature: 0.7,
             maxOutputTokens: 2000,
-            // Thinking is on by default for 2.5 Flash, and it buys nothing here
-            // except a long silence before the first word.
+            // Thinking is on by default for 2.5 Flash, and here it buys nothing
+            // except a long silence before the first word. The entire point of
+            // this lesson is that the first word arrives quickly.
             thinkingConfig: { thinkingBudget: 0 },
           },
         }),
       });
     } catch (error) {
-      // Timed out, or the AI service is unreachable. Same story to the user.
       const timedOut = error instanceof Error && error.name === "TimeoutError";
       logError("generate.upstream_unreachable", error, { destination, days, timedOut });
       return Response.json(
@@ -95,13 +109,12 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!upstream.ok) {
-      // Full detail to the log, one sentence to the user.
+    if (!upstream.ok || !upstream.body) {
       logError("generate.upstream_error", new Error(`AI returned ${upstream.status}`), {
         destination,
         days,
         status: upstream.status,
-        body: (await upstream.text()).slice(0, 2000),
+        body: (await upstream.text().catch(() => "")).slice(0, 2000),
       });
       return Response.json(
         { error: "The trip planner could not plan that one. Try again." },
@@ -109,28 +122,53 @@ export async function POST(request: Request) {
       );
     }
 
-    const data = await upstream.json();
-    const itinerary: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const upstreamBody = upstream.body;
+    let characters = 0;
 
-    // The AI answered, but not with anything usable. This happens, and a blank
-    // panel with no explanation is the worst possible way to hear about it.
-    if (!itinerary.trim()) {
-      logError("generate.empty_response", new Error("No itinerary text in AI response"), {
-        destination,
-        days,
-        shape: Object.keys(data ?? {}),
-      });
-      return Response.json(
-        { error: "The trip planner came back empty handed. Try again." },
-        { status: 502 },
-      );
-    }
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const payload of readSseData(upstreamBody)) {
+            const text = geminiTextFrom(payload);
+            if (!text) continue;
+            characters += text.length;
+            controller.enqueue(line({ text }));
+          }
 
-    logInfo("generate.ok", { destination, days, characters: itinerary.length });
-    return Response.json({ destination, days, itinerary });
+          if (characters === 0) {
+            logError("generate.empty_response", new Error("AI streamed no text"), {
+              destination,
+              days,
+            });
+            controller.enqueue(
+              line({ error: "The trip planner came back empty handed. Try again." }),
+            );
+          } else {
+            logInfo("generate.ok", { destination, days, characters });
+          }
+        } catch (error) {
+          // The stream broke partway. The browser already has real text on
+          // screen, so send an error line rather than throwing it all away.
+          logError("generate.stream_broke", error, { destination, days, characters });
+          controller.enqueue(
+            line({ error: "The connection dropped partway through this trip." }),
+          );
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "Cache-Control": "no-store",
+        // Tells proxies not to sit on the response waiting for it to finish,
+        // which would undo the entire point of streaming.
+        "X-Accel-Buffering": "no",
+      },
+    });
   } catch (error) {
-    // The catch-all. Whatever went wrong here was not anticipated, so it gets
-    // logged in full and the user still gets a sentence rather than a stack.
     logError("generate.unhandled", error, { destination, days });
     return Response.json({ error: "Something went wrong on our end." }, { status: 500 });
   }
