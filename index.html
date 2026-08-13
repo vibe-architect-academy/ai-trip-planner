@@ -64,8 +64,9 @@
   </div>
   <div id="itinerary"><div class="card" id="out"></div></div>
 </div>
+<script src="config.js"></script>
 <script>
-  const API_KEY = "GEMINI_KEY_HERE";
+  const API_KEY = (window.CONFIG || {}).GEMINI_API_KEY;
   const btn = document.getElementById("go");
   const status = document.getElementById("status");
   const box = document.getElementById("itinerary");
@@ -83,6 +84,11 @@
   }
 
   btn.addEventListener("click", async () => {
+    if (!API_KEY) {
+      box.style.display = "block";
+      out.textContent = "No API key found. Copy config.example.js to config.js and put your Gemini key in it.";
+      return;
+    }
     const dest = document.getElementById("dest").value || "Kyoto";
     const days = document.getElementById("days").value || "3";
     btn.disabled = true; status.style.display = "block"; box.style.display = "none"; out.innerHTML = "";

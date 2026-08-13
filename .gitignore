@@ -3,6 +3,10 @@
 .env.*
 !.env.example
 
+# The browser-only version of the app keeps its key here.
+# config.example.js is committed so you know which keys you need.
+config.js
+
 # Dependencies
 node_modules/
 .pnp
