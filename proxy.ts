@@ -47,6 +47,8 @@ const isPublicRoute = createRouteMatcher([
    */
   "/share/(.*)",
   "/privacy",
+  // Uptime monitors do not sign in.
+  "/api/health",
 ]);
 
 const isAdminRoute = createRouteMatcher(["/admin(.*)"]);

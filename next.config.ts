@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   images: {
@@ -42,4 +43,20 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+/*
+ * Sentry wraps the config to upload source maps at build time, which is what
+ * turns a stack trace full of minified nonsense into one naming real files
+ * and lines. Without it a production error report is close to unreadable.
+ */
+export default withSentryConfig(nextConfig, {
+  silent: true,
+  // Nothing is uploaded without these, so a build with no Sentry account
+  // still succeeds rather than failing on a missing token.
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  sourcemaps: {
+    // Delete the maps after they are uploaded, so Sentry can read them and
+    // the browser cannot. Shipping them publicly hands anyone your source.
+    deleteSourcemapsAfterUpload: true,
+  },
+});
