@@ -9,6 +9,7 @@
 
 import { logError, logInfo } from "@/lib/log";
 import { readSseData, geminiTextFrom } from "@/lib/sse";
+import { getViewer, unauthorized, forbidden } from "@/lib/auth";
 
 const MODEL = "gemini-2.5-flash";
 
@@ -45,6 +46,14 @@ export async function POST(request: Request) {
   let days = 0;
 
   try {
+    // Ask again, here, even though the middleware already turned away anyone
+    // without a session. The middleware protects the route; this protects the
+    // work. Generating costs money, and "who is spending it" is a question the
+    // handler has to be able to answer on its own.
+    const viewer = await getViewer();
+    if (!viewer) return unauthorized();
+    if (viewer.banned) return forbidden("This account has been suspended.");
+
     let body: { destination?: unknown; days?: unknown };
     try {
       body = await request.json();
@@ -144,7 +153,7 @@ export async function POST(request: Request) {
               line({ error: "The trip planner came back empty handed. Try again." }),
             );
           } else {
-            logInfo("generate.ok", { destination, days, characters });
+            logInfo("generate.ok", { userId: viewer.userId, destination, days, characters });
           }
         } catch (error) {
           // The stream broke partway. The browser already has real text on
