@@ -2,8 +2,10 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import DayCard from "@/components/DayCard";
+import PhotoStrip from "@/components/PhotoStrip";
 import { getViewer } from "@/lib/auth";
 import { getTrip } from "@/lib/db/trips";
+import { listPhotos } from "@/lib/db/photos";
 import { isDatabaseConfigured } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +22,8 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
   // bolted on afterwards.
   const trip = await getTrip(id, viewer.userId);
   if (!trip) notFound();
+
+  const photos = await listPhotos(id, viewer.userId);
 
   return (
     <main className="mx-auto w-full max-w-xl px-5 py-10 sm:py-16">
@@ -52,6 +56,15 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
           ))}
         </div>
       </section>
+
+      <PhotoStrip
+        tripId={trip.id}
+        initialPhotos={photos.map((photo) => ({
+          id: photo.id,
+          url: photo.url,
+          caption: photo.caption,
+        }))}
+      />
     </main>
   );
 }

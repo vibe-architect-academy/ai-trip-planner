@@ -73,8 +73,35 @@ export const activities = pgTable(
   (table) => [uniqueIndex("activities_day_position_idx").on(table.dayId, table.position)],
 );
 
+export const photos = pgTable(
+  "photos",
+  {
+    id: text("id").primaryKey(),
+    tripId: text("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    /**
+     * Denormalised on purpose. Every photo read starts with "is this yours",
+     * and carrying the owner here answers that without a join back to trips.
+     */
+    userId: text("user_id").notNull(),
+    /** The Blob URL. The file itself is never in the database. */
+    url: text("url").notNull(),
+    /** Blob's own path, which is what deletion needs. */
+    pathname: text("pathname").notNull(),
+    caption: text("caption"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("photos_trip_id_idx").on(table.tripId)],
+);
+
 export const tripsRelations = relations(trips, ({ many }) => ({
   days: many(days),
+  photos: many(photos),
+}));
+
+export const photosRelations = relations(photos, ({ one }) => ({
+  trip: one(trips, { fields: [photos.tripId], references: [trips.id] }),
 }));
 
 export const daysRelations = relations(days, ({ one, many }) => ({
@@ -89,3 +116,4 @@ export const activitiesRelations = relations(activities, ({ one }) => ({
 export type Trip = typeof trips.$inferSelect;
 export type Day = typeof days.$inferSelect;
 export type Activity = typeof activities.$inferSelect;
+export type Photo = typeof photos.$inferSelect;

@@ -34,6 +34,20 @@ of this that could return somebody else's.
 | Rules it enforces | Signed in, not suspended, and the trip must be yours. Ownership is part of the `WHERE` clause, not a check afterwards. |
 | Answers with | `404` for both "no such trip" and "not yours", deliberately. A `403` would confirm the trip exists, and that is already more than a stranger should learn. |
 
+### `POST /api/trips/[id]/photos`, `GET /api/trips/[id]/photos`
+
+| | |
+|---|---|
+| What it does | Uploads an image to Vercel Blob and records its URL against the trip. |
+| Secrets it touches | `BLOB_READ_WRITE_TOKEN`. |
+| Rules it enforces | Signed in, not suspended, and the trip must be yours, checked before anything that costs storage. JPEG or PNG only, decided by reading the file's first bytes rather than trusting the Content-Type the browser sent. Under 4MB, which is the practical ceiling on what a serverless function can receive. Twenty photos per trip. |
+| Answers with | `201` and the photo, `404` if the trip is not yours, `413` if too large, `415` if it is not really an image, `409` at the per-trip limit. |
+
+The file lives in Blob and only its URL lives in the database. Images in
+Postgres work right up until they do not: rows get enormous, every query that
+touches the table drags megabytes around, and backups balloon.
+
+
 ## The data
 
 `lib/db/schema.ts`. A user has many trips, a trip has many days, a day has many
