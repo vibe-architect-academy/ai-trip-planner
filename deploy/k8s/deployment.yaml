@@ -1,0 +1,101 @@
+# Orchestrating the fleet.
+#
+# The same three instances from the nginx lesson, described instead of
+# started. That difference is the whole idea: you say what should be true, and
+# something else works continuously to keep it true. A container that dies is
+# replaced without anyone being woken up.
+#
+# This is the heaviest tool in the course and the one most projects do not
+# need. It is here so you recognise it, and so the day someone says "we should
+# put this on Kubernetes" you can ask what it buys.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trip-planner
+  labels:
+    app: trip-planner
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: trip-planner
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # Never take one down before its replacement is ready. This is what makes
+      # a deploy invisible rather than a brief outage.
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: trip-planner
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+        - name: app
+          # Built and pushed by .github/workflows/ci.yml. Pin a real tag in
+          # anything you actually run: ":latest" makes a rollback impossible,
+          # because there is no name for the version that worked an hour ago.
+          image: ghcr.io/vibe-architect-academy/ai-trip-planner:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: production
+          # Secrets come from a Secret object, never from this file. This file
+          # is in git; secrets are not, and that boundary is the same one from
+          # lesson 3 wearing different clothes.
+          envFrom:
+            - secretRef:
+                name: trip-planner-secrets
+
+          resources:
+            # requests is what the scheduler reserves. limits is where it gets
+            # killed. Without limits one bad instance can starve every other
+            # thing on the node.
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+
+          # Two probes, two different questions, and confusing them is the
+          # classic mistake.
+          #
+          # readiness: "should this receive traffic yet?" A container that fails
+          # it is taken out of rotation and left alone.
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          # liveness: "is this beyond saving?" A container that fails it is
+          # killed and replaced. Pointing this at a health check that includes
+          # the database means a database blip restarts every instance you
+          # have, turning a small outage into a total one, so it deliberately
+          # asks a simpler question.
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: trip-planner
+spec:
+  selector:
+    app: trip-planner
+  ports:
+    - port: 80
+      targetPort: 3000
