@@ -15,6 +15,7 @@ import { isAiConfigured } from "@/lib/ai/provider";
 import { describeTrip } from "@/lib/ai/classify";
 import { getAllowance } from "@/lib/db/billing";
 import { limitMessage } from "@/lib/billing/plans";
+import { track, EVENTS } from "@/lib/analytics";
 import { createTrip, listTrips, saveItinerary, markTripReady } from "@/lib/db/trips";
 import { isDatabaseConfigured } from "@/lib/db";
 import { getLocale, languageForPrompt } from "@/lib/i18n";
@@ -89,6 +90,9 @@ export async function POST(request: Request) {
     const allowance = await getAllowance(viewer.userId);
 
     if (!allowance.canCreate) {
+      // Worth recording. How many people hit this, and how many then upgrade,
+      // is the entire question of whether the free tier is set correctly.
+      track(viewer.userId, EVENTS.limitHit, { reason: "trips", used: allowance.used });
       // 402 Payment Required, which is precisely what this is.
       return Response.json(
         { error: limitMessage("trips"), plan: allowance.plan, upgrade: true },
@@ -97,6 +101,7 @@ export async function POST(request: Request) {
     }
 
     if (dayCount > allowance.maxDays) {
+      track(viewer.userId, EVENTS.limitHit, { reason: "days", asked: dayCount });
       return Response.json(
         { error: limitMessage("days"), plan: allowance.plan, upgrade: true },
         { status: 402 },
@@ -113,6 +118,7 @@ export async function POST(request: Request) {
 
     const language = languageForPrompt(await getLocale());
     const trip = await createTrip({ userId: viewer.userId, destination, dayCount });
+    track(viewer.userId, EVENTS.tripStarted, { destination, days: dayCount, plan: allowance.plan });
 
     let source;
     try {
@@ -175,6 +181,14 @@ export async function POST(request: Request) {
               provider: source.provider,
               model: source.model,
               characters: itinerary.length,
+            });
+
+            track(userId, EVENTS.tripGenerated, {
+              tripId: trip.id,
+              days: dayCount,
+              provider: source.provider,
+              model: source.model,
+              wellFormed: check.ok,
             });
 
             // The cheap model's turn, after the reader already has what they

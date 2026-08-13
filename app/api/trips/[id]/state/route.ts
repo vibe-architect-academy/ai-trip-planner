@@ -17,6 +17,7 @@ import {
 import { sendShareInvite, isEmailConfigured } from "@/lib/email/send";
 import { viewerLabel } from "@/lib/auth";
 import { siteUrl } from "@/lib/site";
+import { track, EVENTS } from "@/lib/analytics";
 import { isDatabaseConfigured } from "@/lib/db";
 import { isTripState, refusalReason, type TripState } from "@/lib/trip-state";
 
@@ -89,6 +90,10 @@ export async function POST(request: Request, { params }: Params) {
       from,
       to: action.to,
     });
+
+    if (action.to === "shared") {
+      track(viewer.userId, EVENTS.tripShared, { tripId: id, viaEmail: Boolean(body.email) });
+    }
 
     // The invite goes out while they are watching, so a failure is theirs to
     // see rather than something they find out about from a silent partner.

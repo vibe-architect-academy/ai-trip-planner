@@ -13,6 +13,7 @@ import { getViewer, unauthorized, forbidden } from "@/lib/auth";
 import { addPhoto, listPhotos, countPhotos, ownsTrip } from "@/lib/db/photos";
 import { isDatabaseConfigured } from "@/lib/db";
 import { enqueuePhoto, isQueueConfigured } from "@/lib/queue";
+import { track, EVENTS } from "@/lib/analytics";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -156,6 +157,7 @@ export async function POST(request: Request, { params }: Params) {
       }
     }
 
+    track(viewer.userId, EVENTS.photoUploaded, { tripId: id, bytes: file.size });
     logInfo("photos.uploaded", { userId: viewer.userId, tripId: id, bytes: file.size });
     // 202: accepted, not finished. The status field says which.
     return Response.json({ photo }, { status: 202 });

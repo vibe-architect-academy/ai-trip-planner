@@ -23,6 +23,7 @@ import { logError, logInfo } from "@/lib/log";
 import { stripe, isBillingConfigured } from "@/lib/billing/stripe";
 import { setPlan, claimEvent, releaseEvent } from "@/lib/db/billing";
 import { isDatabaseConfigured } from "@/lib/db";
+import { track, EVENTS } from "@/lib/analytics";
 
 /** Events worth acting on. Everything else is acknowledged and ignored. */
 const HANDLED = new Set([
@@ -166,6 +167,13 @@ export async function POST(request: Request) {
       stripeSubscriptionId: subscriptionId,
       currentPeriodEnd: endsAt,
     });
+
+    // Recorded from the webhook, not from the browser landing on the success
+    // page. The webhook is the moment money actually moved; a success page is
+    // just a redirect somebody can visit by typing the URL.
+    if (plan === "premium") {
+      await track(userId, EVENTS.upgraded, { eventId: event.id });
+    }
 
     logInfo("billing.plan_changed", { userId, plan, status, eventId: event.id });
     return Response.json({ ok: true });
