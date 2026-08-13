@@ -1,0 +1,92 @@
+# The assembly line.
+#
+# Runs on every push and every pull request, so "it builds on my machine" stops
+# being something anyone has to take on faith.
+#
+# The jobs are ordered cheapest first on purpose. A type error should be
+# reported in thirty seconds, not after a five minute browser install.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to the same branch cancels the first. Without this, pushing
+# three times in a minute runs three full builds and you wait for all of them.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Types and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          # Caches ~/.npm keyed on the lockfile, which is most of the run time.
+          cache: npm
+
+      # `npm ci` rather than `npm install`, because it installs exactly what
+      # the lockfile says. `install` is allowed to resolve something newer,
+      # which means CI can pass against dependencies nobody has ever run.
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+        env:
+          # Deliberately no real secrets. The build must succeed without them,
+          # and this job is what keeps that true: the day someone reads a
+          # secret at module scope, this goes red.
+          NEXT_TELEMETRY_DISABLED: "1"
+
+      - name: No secrets in the client bundle
+        # The check that would have caught lesson 3's mistake automatically.
+        # A NEXT_PUBLIC_ prefix on the wrong variable ships a key to every
+        # visitor, and it looks exactly like working code in review.
+        run: |
+          if grep -rIE "sk_test_|sk_live_|whsec_|AIza[0-9A-Za-z_-]{30}" .next/static/ ; then
+            echo "::error::A credential-shaped string is in the browser bundle."
+            exit 1
+          fi
+          echo "Client bundle is clean."
+
+  e2e:
+    name: End to end
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run tests
+        run: npm run test:e2e -- --project=chromium
+        env:
+          # Tests that need these skip themselves, loudly, when they are empty.
+          # The suite still runs and still catches the API-level regressions.
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+
+      - uses: actions/upload-artifact@v4
+        # Only on failure. Uploading a report for every green run is storage
+        # nobody opens.
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
