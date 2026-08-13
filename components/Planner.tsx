@@ -14,10 +14,23 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import SearchForm from "@/components/SearchForm";
+import SearchForm, { type SearchLabels } from "@/components/SearchForm";
 import TripResults from "@/components/TripResults";
 
-export default function Planner() {
+export type PlannerLabels = SearchLabels & {
+  saved: string;
+  savedLink: string;
+  savedRest: string;
+  genericError: string;
+  offlineError: string;
+};
+
+/**
+ * Strings arrive as props rather than being looked up here. The server already
+ * knows the language, and having the browser work it out again is how you get
+ * a page that renders in English and then blinks into French.
+ */
+export default function Planner({ labels }: { labels: PlannerLabels }) {
   const [destination, setDestination] = useState("");
   const [days, setDays] = useState("3");
   const [trip, setTrip] = useState<{ destination: string; itinerary: string } | null>(null);
@@ -47,7 +60,7 @@ export default function Planner() {
       // that is its own crash, so read the body defensively.
       if (!response.ok || !response.body) {
         const data = await response.json().catch(() => ({}));
-        setError(data.error ?? "Something went wrong. Try again.");
+        setError(data.error ?? labels.genericError);
         return;
       }
 
@@ -94,7 +107,7 @@ export default function Planner() {
     } catch {
       // fetch only rejects when the request never completed: the connection
       // dropped, the user went offline, the tab lost the network.
-      setError("We could not reach the server. Check your connection and try again.");
+      setError(labels.offlineError);
     } finally {
       // In `finally` on purpose. Every path above has to put the button back,
       // and the one that forgets is the one that leaves someone staring at a
@@ -109,6 +122,7 @@ export default function Planner() {
         destination={destination}
         days={days}
         isPlanning={isPlanning}
+        labels={labels}
         onDestinationChange={setDestination}
         onDaysChange={setDays}
         onSubmit={planTrip}
@@ -127,14 +141,14 @@ export default function Planner() {
 
       {isSaved && tripId && (
         <p className="mt-4 text-sm text-slate-600 dark:text-slate-400">
-          Saved.{" "}
+          {labels.saved}{" "}
           <Link
             href={`/trips/${tripId}`}
             className="focus-ring rounded font-medium text-indigo-600 hover:underline dark:text-indigo-400"
           >
-            This trip has its own page now
+            {labels.savedLink}
           </Link>
-          , and it will still be there tomorrow.
+          {labels.savedRest}
         </p>
       )}
     </>

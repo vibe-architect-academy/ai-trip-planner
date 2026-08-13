@@ -1,9 +1,18 @@
 "use client";
 
+export type SearchLabels = {
+  destinationLabel: string;
+  destinationPlaceholder: string;
+  daysLabel: string;
+  submit: string;
+  planning: string;
+};
+
 export default function SearchForm({
   destination,
   days,
   isPlanning,
+  labels,
   onDestinationChange,
   onDaysChange,
   onSubmit,
@@ -11,6 +20,7 @@ export default function SearchForm({
   destination: string;
   days: string;
   isPlanning: boolean;
+  labels: SearchLabels;
   onDestinationChange: (value: string) => void;
   onDaysChange: (value: string) => void;
   onSubmit: () => void;
@@ -30,7 +40,7 @@ export default function SearchForm({
               htmlFor="destination"
               className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
             >
-              Where to?
+              {labels.destinationLabel}
             </label>
             <input
               id="destination"
@@ -38,7 +48,7 @@ export default function SearchForm({
               type="text"
               value={destination}
               onChange={(event) => onDestinationChange(event.target.value)}
-              placeholder="Kyoto"
+              placeholder={labels.destinationPlaceholder}
               autoComplete="off"
               className="focus-ring w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3.5 py-3 text-base placeholder:text-slate-400 dark:placeholder:text-slate-500"
             />
@@ -48,7 +58,7 @@ export default function SearchForm({
               htmlFor="days"
               className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
             >
-              Days
+              {labels.daysLabel}
             </label>
             <input
               id="days"
@@ -70,7 +80,7 @@ export default function SearchForm({
           disabled={isPlanning}
           className="focus-ring mt-5 w-full rounded-lg bg-indigo-600 px-4 py-3.5 text-base font-semibold text-white hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-60 disabled:cursor-wait transition-colors"
         >
-          Generate my trip
+          {labels.submit}
         </button>
       </form>
 
@@ -84,7 +94,7 @@ export default function SearchForm({
             className="inline-block h-2 w-2 rounded-full bg-indigo-600 dark:bg-indigo-400 motion-safe:animate-pulse"
             aria-hidden="true"
           />
-          Planning your days...
+          {labels.planning}
         </p>
       )}
     </section>

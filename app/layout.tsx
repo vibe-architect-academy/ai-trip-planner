@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { siteUrl, siteName, siteDescription } from "@/lib/site";
+import { getLocale } from "@/lib/i18n";
 import "./globals.css";
 
 /**
@@ -34,12 +35,16 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // The <html lang> attribute is not decoration. Screen readers pick a voice
+  // from it, and browsers pick hyphenation and quote marks from it.
+  const locale = await getLocale();
+
   return (
     <ClerkProvider>
-      <html lang="en">
+      <html lang={locale}>
         <body className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 dark:from-slate-950 dark:to-slate-900 text-slate-900 dark:text-slate-100 antialiased">
           {children}
         </body>

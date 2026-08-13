@@ -8,6 +8,7 @@ import { getViewer } from "@/lib/auth";
 import { getTrip } from "@/lib/db/trips";
 import { listPhotos } from "@/lib/db/photos";
 import { isDatabaseConfigured } from "@/lib/db";
+import { getLocale, translator } from "@/lib/i18n";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,7 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
   if (!trip) notFound();
 
   const photos = await listPhotos(id, viewer.userId);
+  const t = translator(await getLocale());
 
   return (
     <main className="mx-auto w-full max-w-xl px-4 py-8 sm:px-6 sm:py-14 lg:max-w-5xl">
@@ -64,7 +66,7 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
         href="/trips"
         className="focus-ring rounded text-sm text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400"
       >
-        Back to your trips
+        {t("trips.back")}
       </Link>
 
       <h2 className="mt-3 text-2xl font-bold tracking-tight">

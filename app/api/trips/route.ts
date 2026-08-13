@@ -13,18 +13,22 @@ import { readSseData, geminiTextFrom } from "@/lib/sse";
 import { getViewer, unauthorized, forbidden } from "@/lib/auth";
 import { createTrip, listTrips, saveItinerary } from "@/lib/db/trips";
 import { isDatabaseConfigured } from "@/lib/db";
+import { getLocale, languageForPrompt } from "@/lib/i18n";
 
 const MODEL = "gemini-2.5-flash";
 export const maxDuration = 120;
 const UPSTREAM_TIMEOUT_MS = 20_000;
 
-function buildPrompt(destination: string, days: number): string {
+function buildPrompt(destination: string, days: number, language: string): string {
   return [
     `Plan a ${days}-day trip to ${destination}.`,
     "For each day give a morning activity, an afternoon activity, an evening",
     "activity, and a restaurant recommendation, with specific real places.",
     'Format: a heading per day like "### Day 1", then 4 short bullet points.',
     "No intro or outro text, start directly with Day 1.",
+    // Translating the buttons and leaving the itinerary in English is a half
+    // finished job. The content is the part they came for.
+    `Write the entire itinerary in ${language}, including the day headings.`,
   ].join(" ");
 }
 
@@ -89,6 +93,7 @@ export async function POST(request: Request) {
       );
     }
 
+    const language = languageForPrompt(await getLocale());
     const trip = await createTrip({ userId: viewer.userId, destination, dayCount });
 
     const url =
@@ -102,7 +107,7 @@ export async function POST(request: Request) {
         headers: { "Content-Type": "application/json" },
         signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
         body: JSON.stringify({
-          contents: [{ parts: [{ text: buildPrompt(destination, dayCount) }] }],
+          contents: [{ parts: [{ text: buildPrompt(destination, dayCount, language) }] }],
           generationConfig: {
             temperature: 0.7,
             maxOutputTokens: 2000,

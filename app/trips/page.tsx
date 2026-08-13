@@ -4,6 +4,7 @@ import AppHeader from "@/components/AppHeader";
 import { getViewer } from "@/lib/auth";
 import { listTrips } from "@/lib/db/trips";
 import { isDatabaseConfigured } from "@/lib/db";
+import { getLocale, translator } from "@/lib/i18n";
 
 export const metadata = { title: "Your trips", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
@@ -13,24 +14,26 @@ export default async function TripsPage() {
   if (!viewer) redirect("/sign-in");
 
   const trips = isDatabaseConfigured() ? await listTrips(viewer.userId) : [];
+  const locale = await getLocale();
+  const t = translator(locale);
 
   return (
     <main className="mx-auto w-full max-w-xl px-4 py-8 sm:px-6 sm:py-14 lg:max-w-5xl">
       <AppHeader />
 
       <div className="mb-5 flex items-baseline justify-between">
-        <h2 className="text-xl font-semibold">Your trips</h2>
+        <h2 className="text-xl font-semibold">{t("trips.heading")}</h2>
         <Link
           href="/"
           className="focus-ring rounded text-sm text-indigo-600 hover:underline dark:text-indigo-400"
         >
-          Plan another
+          {t("trips.planAnother")}
         </Link>
       </div>
 
       {trips.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-8 text-center text-slate-500 dark:text-slate-400">
-          No trips yet. Plan one and it will be here when you come back.
+          {t("trips.empty")}
         </p>
       ) : (
         <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -42,8 +45,7 @@ export default async function TripsPage() {
               >
                 <span className="font-semibold">{trip.title ?? trip.destination}</span>
                 <span className="mt-1 block text-sm text-slate-500 dark:text-slate-400">
-                  {trip.dayCount} {trip.dayCount === 1 ? "day" : "days"} in{" "}
-                  {trip.destination}
+                  {t("trip.days", { count: trip.dayCount, destination: trip.destination })}
                 </span>
               </Link>
             </li>
