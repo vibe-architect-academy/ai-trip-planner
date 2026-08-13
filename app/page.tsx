@@ -1,39 +1,28 @@
 "use client";
 
 /**
- * The front of house.
+ * The conductor.
  *
- * This runs in the browser. It knows how to ask and how to display, and
- * nothing else. There is no API key anywhere in this file, which is the
- * entire point of lesson 5: open DevTools, watch the network, and the only
- * request you will see goes to /api/generate on this same site.
+ * This file no longer knows how a form is laid out or how a day is drawn. It
+ * holds the state, calls /api/generate, and hands the answer to whichever
+ * component is responsible for showing it.
  */
 
 import { useState } from "react";
-
-function markdownToHtml(markdown: string): string {
-  return markdown
-    .replace(/^### (.*)$/gm, "<h2>$1</h2>")
-    .replace(/^## (.*)$/gm, "<h2>$1</h2>")
-    .replace(/^\*\*(.*)\*\*$/gm, "<h2>$1</h2>")
-    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-    .replace(/^[-*] (.*)$/gm, "<li>$1</li>")
-    .replace(/(<li>[\s\S]*?<\/li>)(?!\s*<li>)/g, "<ul>$1</ul>")
-    .replace(/\n{2,}/g, "<br>");
-}
+import SearchForm from "@/components/SearchForm";
+import TripResults from "@/components/TripResults";
 
 export default function Home() {
   const [destination, setDestination] = useState("");
   const [days, setDays] = useState("3");
-  const [itinerary, setItinerary] = useState("");
+  const [trip, setTrip] = useState<{ destination: string; itinerary: string } | null>(null);
   const [isPlanning, setIsPlanning] = useState(false);
   const [error, setError] = useState("");
 
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
+  async function planTrip() {
     setIsPlanning(true);
     setError("");
-    setItinerary("");
+    setTrip(null);
 
     const response = await fetch("/api/generate", {
       method: "POST",
@@ -48,7 +37,7 @@ export default function Home() {
     if (!response.ok) {
       setError(data.error ?? "Something went wrong.");
     } else {
-      setItinerary(data.itinerary);
+      setTrip({ destination: data.destination, itinerary: data.itinerary });
     }
     setIsPlanning(false);
   }
@@ -67,72 +56,14 @@ export default function Home() {
         </p>
       </header>
 
-      <section className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-5 sm:p-6 shadow-sm">
-        <form onSubmit={handleSubmit} noValidate>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
-              <label
-                htmlFor="destination"
-                className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
-              >
-                Where to?
-              </label>
-              <input
-                id="destination"
-                name="destination"
-                type="text"
-                value={destination}
-                onChange={(e) => setDestination(e.target.value)}
-                placeholder="Kyoto"
-                autoComplete="off"
-                className="focus-ring w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3.5 py-3 text-base placeholder:text-slate-400 dark:placeholder:text-slate-500"
-              />
-            </div>
-            <div className="sm:w-28">
-              <label
-                htmlFor="days"
-                className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
-              >
-                Days
-              </label>
-              <input
-                id="days"
-                name="days"
-                type="number"
-                min={1}
-                max={7}
-                inputMode="numeric"
-                value={days}
-                onChange={(e) => setDays(e.target.value)}
-                autoComplete="off"
-                className="focus-ring w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3.5 py-3 text-base"
-              />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isPlanning}
-            className="focus-ring mt-5 w-full rounded-lg bg-indigo-600 px-4 py-3.5 text-base font-semibold text-white hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-60 disabled:cursor-wait transition-colors"
-          >
-            Generate my trip
-          </button>
-        </form>
-
-        {isPlanning && (
-          <p
-            role="status"
-            aria-live="polite"
-            className="mt-4 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400"
-          >
-            <span
-              className="inline-block h-2 w-2 rounded-full bg-indigo-600 dark:bg-indigo-400 motion-safe:animate-pulse"
-              aria-hidden="true"
-            />
-            Planning your days...
-          </p>
-        )}
-      </section>
+      <SearchForm
+        destination={destination}
+        days={days}
+        isPlanning={isPlanning}
+        onDestinationChange={setDestination}
+        onDaysChange={setDays}
+        onSubmit={planTrip}
+      />
 
       {error && (
         <p
@@ -143,17 +74,7 @@ export default function Home() {
         </p>
       )}
 
-      {itinerary && (
-        <section
-          aria-live="polite"
-          className="mt-6 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-5 sm:p-6 shadow-sm"
-        >
-          <div
-            className="prose-trip text-[15px] leading-relaxed"
-            dangerouslySetInnerHTML={{ __html: markdownToHtml(itinerary) }}
-          />
-        </section>
-      )}
+      {trip && <TripResults destination={trip.destination} itinerary={trip.itinerary} />}
     </main>
   );
 }
