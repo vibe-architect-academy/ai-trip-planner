@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { siteUrl, siteName, siteDescription } from "@/lib/site";
 import { getLocale } from "@/lib/i18n";
+import PerfBanner from "@/components/PerfBanner";
 import "./globals.css";
 
 /**
@@ -47,6 +48,7 @@ export default async function RootLayout({
       <html lang={locale}>
         <body className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 dark:from-slate-950 dark:to-slate-900 text-slate-900 dark:text-slate-100 antialiased">
           {children}
+          <PerfBanner />
         </body>
       </html>
     </ClerkProvider>

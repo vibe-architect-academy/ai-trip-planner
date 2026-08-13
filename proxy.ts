@@ -21,6 +21,10 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/suspended",
+  // The same answer for everyone, and cached at the edge. Putting a session
+  // check in front of a cacheable response defeats the caching, because the
+  // CDN can no longer answer without asking us who is calling.
+  "/api/destinations",
 ]);
 
 const isAdminRoute = createRouteMatcher(["/admin(.*)"]);

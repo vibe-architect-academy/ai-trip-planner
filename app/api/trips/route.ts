@@ -45,7 +45,15 @@ export async function GET() {
   }
 
   try {
-    return Response.json({ trips: await listTrips(viewer.userId) });
+    return Response.json(
+      { trips: await listTrips(viewer.userId) },
+      {
+        // Never cached, anywhere, by anyone. This answer is different for
+        // every person who asks, and a personal response sitting in a shared
+        // cache is how one user's trips get served to the next one.
+        headers: { "Cache-Control": "private, no-store" },
+      },
+    );
   } catch (error) {
     logError("trips.list_failed", error, { userId: viewer.userId });
     return Response.json({ error: "We could not load your trips." }, { status: 500 });
