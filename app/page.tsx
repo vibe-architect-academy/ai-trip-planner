@@ -24,22 +24,35 @@ export default function Home() {
     setError("");
     setTrip(null);
 
-    const response = await fetch("/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        destination: destination.trim() || "Kyoto",
-        days: Number(days) || 3,
-      }),
-    });
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          destination: destination.trim() || "Kyoto",
+          days: Number(days) || 3,
+        }),
+      });
 
-    const data = await response.json();
-    if (!response.ok) {
-      setError(data.error ?? "Something went wrong.");
-    } else {
-      setTrip({ destination: data.destination, itinerary: data.itinerary });
+      // A server that fell over hard answers with HTML, not JSON, and parsing
+      // that is its own crash. Read the body defensively.
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setError(data.error ?? "Something went wrong. Try again.");
+      } else {
+        setTrip({ destination: data.destination, itinerary: data.itinerary });
+      }
+    } catch {
+      // fetch only rejects when the request never completed: the connection
+      // dropped, the user went offline, the tab lost the network.
+      setError("We could not reach the server. Check your connection and try again.");
+    } finally {
+      // In `finally` on purpose. Every path above has to put the button back,
+      // and the one that forgets is the one that leaves someone staring at a
+      // spinner that will never stop.
+      setIsPlanning(false);
     }
-    setIsPlanning(false);
   }
 
   return (
