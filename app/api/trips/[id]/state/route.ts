@@ -8,7 +8,15 @@
 
 import { logError, logInfo } from "@/lib/log";
 import { getViewer, unauthorized, forbidden } from "@/lib/auth";
-import { getTrip, transitionTrip } from "@/lib/db/trips";
+import {
+  getTrip,
+  transitionTrip,
+  setShareToken,
+  newShareToken,
+} from "@/lib/db/trips";
+import { sendShareInvite, isEmailConfigured } from "@/lib/email/send";
+import { viewerLabel } from "@/lib/auth";
+import { siteUrl } from "@/lib/site";
 import { isDatabaseConfigured } from "@/lib/db";
 import { isTripState, refusalReason, type TripState } from "@/lib/trip-state";
 
@@ -59,6 +67,22 @@ export async function POST(request: Request, { params }: Params) {
       );
     }
 
+    /*
+     * The token is minted only after the state machine agreed to the move,
+     * and cleared as soon as the trip stops being shared. Revoking has to
+     * actually revoke: a link that keeps working after "stop sharing" is a
+     * worse lie than never having offered the button.
+     */
+    let shareUrl: string | null = null;
+
+    if (action.to === "shared") {
+      const token = newShareToken();
+      await setShareToken({ tripId: id, userId: viewer.userId, token });
+      shareUrl = `${siteUrl}/share/${token}`;
+    } else if (from === "shared") {
+      await setShareToken({ tripId: id, userId: viewer.userId, token: null });
+    }
+
     logInfo("trip.transition", {
       userId: viewer.userId,
       tripId: id,
@@ -66,7 +90,22 @@ export async function POST(request: Request, { params }: Params) {
       to: action.to,
     });
 
-    return Response.json({ state: moved.state });
+    // The invite goes out while they are watching, so a failure is theirs to
+    // see rather than something they find out about from a silent partner.
+    let emailed: boolean | null = null;
+    const partnerEmail = String(body.email ?? "").trim();
+
+    if (shareUrl && partnerEmail && isEmailConfigured()) {
+      const result = await sendShareInvite({
+        to: partnerEmail,
+        fromName: await viewerLabel(),
+        tripTitle: trip.title ?? trip.destination,
+        shareUrl,
+      });
+      emailed = result.sent;
+    }
+
+    return Response.json({ state: moved.state, shareUrl, emailed });
   } catch (error) {
     logError("trip.transition_failed", error, { userId: viewer.userId, tripId: id });
     return Response.json({ error: "We could not do that." }, { status: 500 });

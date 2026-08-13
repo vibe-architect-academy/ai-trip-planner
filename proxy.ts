@@ -41,6 +41,11 @@ const isPublicRoute = createRouteMatcher([
    * guarded by its signature instead, in the handler.
    */
   "/api/billing/webhook",
+  /*
+   * A shared trip. The whole point is that someone without an account can
+   * open it, so the token in the URL is the credential rather than a session.
+   */
+  "/share/(.*)",
 ]);
 
 const isAdminRoute = createRouteMatcher(["/admin(.*)"]);

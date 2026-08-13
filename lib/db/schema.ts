@@ -39,6 +39,14 @@ export const trips = pgTable(
     state: text("state").notNull().default("draft"),
     /** When it was shared, so an unshare can be told from never-shared. */
     sharedAt: timestamp("shared_at", { withTimezone: true }),
+    /**
+     * The unguessable half of a share link.
+     *
+     * The trip id is short and appears in the owner's own URLs, so it is not
+     * a secret. This is generated separately and is the only thing that opens
+     * the public page, which means unsharing can revoke it by clearing it.
+     */
+    shareToken: text("share_token"),
     /** The raw text the model produced, kept so a trip can be re-rendered. */
     rawItinerary: text("raw_itinerary"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

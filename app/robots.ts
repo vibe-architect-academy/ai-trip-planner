@@ -9,7 +9,7 @@ export default function robots(): MetadataRoute.Robots {
       // None of these are useful in an index, and two of them are private.
       // A crawler that follows /trips gets a sign-in page for its trouble,
       // which wastes its time and tells it nothing.
-      disallow: ["/api/", "/admin", "/trips", "/sign-in", "/sign-up", "/suspended"],
+      disallow: ["/api/", "/admin", "/trips", "/sign-in", "/sign-up", "/suspended", "/share"],
     },
     sitemap: `${siteUrl}/sitemap.xml`,
   };

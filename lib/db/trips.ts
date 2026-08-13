@@ -185,6 +185,48 @@ export async function getTrip(tripId: string, userId: string): Promise<TripWithD
   return (trip as TripWithDays | undefined) ?? null;
 }
 
+/**
+ * A shared trip, looked up by its token alone.
+ *
+ * The one read in this file with no userId, and deliberately so: the whole
+ * point of a share link is that someone without an account can open it. The
+ * token is the credential, which is why it is generated separately from the
+ * trip id and why clearing it revokes access immediately.
+ */
+export async function getSharedTrip(token: string): Promise<TripWithDays | null> {
+  if (!token || token.length < 20) return null;
+
+  const trip = await db().query.trips.findFirst({
+    where: and(eq(trips.shareToken, token), eq(trips.state, "shared")),
+    with: {
+      days: {
+        orderBy: [days.position],
+        with: { activities: { orderBy: [activities.position] } },
+      },
+    },
+  });
+
+  return (trip as TripWithDays | undefined) ?? null;
+}
+
+/** Mints a token on share. Called only after the state machine has agreed. */
+export async function setShareToken(input: {
+  tripId: string;
+  userId: string;
+  token: string | null;
+}): Promise<void> {
+  await db()
+    .update(trips)
+    .set({ shareToken: input.token })
+    .where(and(eq(trips.id, input.tripId), eq(trips.userId, input.userId)));
+}
+
+export function newShareToken(): string {
+  // 32 hex characters of real randomness. Long enough that guessing is not a
+  // strategy, and it never overlaps with the short, guessable trip id.
+  return crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+}
+
 export async function deleteTrip(tripId: string, userId: string): Promise<boolean> {
   const deleted = await db()
     .delete(trips)
