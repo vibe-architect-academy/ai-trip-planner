@@ -13,6 +13,8 @@ import { getViewer, unauthorized, forbidden } from "@/lib/auth";
 import { streamItinerary, checkItinerary } from "@/lib/ai/itinerary";
 import { isAiConfigured } from "@/lib/ai/provider";
 import { describeTrip } from "@/lib/ai/classify";
+import { getAllowance } from "@/lib/db/billing";
+import { limitMessage } from "@/lib/billing/plans";
 import { createTrip, listTrips, saveItinerary, markTripReady } from "@/lib/db/trips";
 import { isDatabaseConfigured } from "@/lib/db";
 import { getLocale, languageForPrompt } from "@/lib/i18n";
@@ -72,8 +74,33 @@ export async function POST(request: Request) {
     if (destination.length > 60) {
       return Response.json({ error: "That destination is too long." }, { status: 400 });
     }
-    if (!Number.isInteger(dayCount) || dayCount < 1 || dayCount > 7) {
-      return Response.json({ error: "Pick between 1 and 7 days." }, { status: 400 });
+    if (!Number.isInteger(dayCount) || dayCount < 1) {
+      return Response.json({ error: "Pick at least one day." }, { status: 400 });
+    }
+
+    /*
+     * The limits, enforced here.
+     *
+     * The UI also shows them, but the UI is a suggestion: anyone can call
+     * this endpoint directly. If the paywall only exists in the browser then
+     * it is decoration, and the first person to open the network tab gets
+     * premium for nothing.
+     */
+    const allowance = await getAllowance(viewer.userId);
+
+    if (!allowance.canCreate) {
+      // 402 Payment Required, which is precisely what this is.
+      return Response.json(
+        { error: limitMessage("trips"), plan: allowance.plan, upgrade: true },
+        { status: 402 },
+      );
+    }
+
+    if (dayCount > allowance.maxDays) {
+      return Response.json(
+        { error: limitMessage("days"), plan: allowance.plan, upgrade: true },
+        { status: 402 },
+      );
     }
 
     if (!isAiConfigured() || !isDatabaseConfigured()) {

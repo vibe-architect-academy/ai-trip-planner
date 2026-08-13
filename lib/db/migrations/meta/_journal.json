@@ -29,6 +29,13 @@
       "when": 1786628712077,
       "tag": "0003_cynical_doctor_faustus",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786629228239,
+      "tag": "0004_daffy_elektra",
+      "breakpoints": true
     }
   ]
 }

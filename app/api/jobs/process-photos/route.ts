@@ -22,6 +22,8 @@ import {
   MAX_ATTEMPTS,
 } from "@/lib/db/photos";
 import { isDatabaseConfigured } from "@/lib/db";
+import { getPlan } from "@/lib/db/billing";
+import { limitsFor } from "@/lib/billing/plans";
 import { isFromQueue } from "@/lib/queue";
 
 export const maxDuration = 120;
@@ -115,9 +117,14 @@ export async function POST(request: Request) {
       .jpeg({ quality: 82 })
       .toBuffer();
 
+    // Captions are a premium feature, so the plan is checked before spending
+    // an AI call rather than after. The resize happens for everyone.
+    const plan = await getPlan(photo.userId);
     let caption = "";
     try {
-      caption = await captionFor(resized.toString("base64"), "image/jpeg");
+      if (limitsFor(plan).photoCaptions) {
+        caption = await captionFor(resized.toString("base64"), "image/jpeg");
+      }
     } catch (error) {
       // A missing caption is a worse photo, not a failed one. Losing the
       // resize because the caption model was busy would be the wrong trade.

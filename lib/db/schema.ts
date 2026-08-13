@@ -136,3 +136,41 @@ export type Trip = typeof trips.$inferSelect;
 export type Day = typeof days.$inferSelect;
 export type Activity = typeof activities.$inferSelect;
 export type Photo = typeof photos.$inferSelect;
+
+/**
+ * What someone is entitled to, and the receipts behind it.
+ *
+ * Kept in our database rather than read from Stripe on every request. Stripe
+ * is the truth about money; this is the truth about access, and the app has to
+ * be able to answer "can this person do this" without a network call to a
+ * third party that might be down.
+ */
+export const subscriptions = pgTable("subscriptions", {
+  /** Clerk's user id. One row per person, which is why it is the key. */
+  userId: text("user_id").primaryKey(),
+  /** "free" or "premium". Everything gates on this one word. */
+  plan: text("plan").notNull().default("free"),
+  status: text("status").notNull().default("active"),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  /** When access lapses if they cancel. Null on the free plan. */
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Every webhook event that has been acted on.
+ *
+ * The primary key is Stripe's event id, which is the whole point. Stripe
+ * delivers at least once and will happily send the same event twice; an insert
+ * that collides here means "already handled", and the second delivery does
+ * nothing instead of granting a second month.
+ */
+export const paymentEvents = pgTable("payment_events", {
+  eventId: text("event_id").primaryKey(),
+  type: text("type").notNull(),
+  userId: text("user_id"),
+  handledAt: timestamp("handled_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type Subscription = typeof subscriptions.$inferSelect;

@@ -35,6 +35,12 @@ const isPublicRoute = createRouteMatcher([
    * it cannot prove came from the queue.
    */
   "/api/jobs/(.*)",
+  /*
+   * Stripe's webhook, same reasoning as the workers. Stripe has no session,
+   * and a sign-in redirect would mean no payment was ever recorded. It is
+   * guarded by its signature instead, in the handler.
+   */
+  "/api/billing/webhook",
 ]);
 
 const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
