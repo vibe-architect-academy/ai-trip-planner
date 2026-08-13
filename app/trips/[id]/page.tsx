@@ -96,7 +96,14 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
           id: photo.id,
           url: photo.url,
           caption: photo.caption,
+          status: photo.status,
         }))}
+        labels={{
+          heading: t("photos.heading"),
+          add: t("photos.add"),
+          uploading: t("photos.uploading"),
+          empty: t("photos.empty"),
+        }}
       />
     </main>
   );

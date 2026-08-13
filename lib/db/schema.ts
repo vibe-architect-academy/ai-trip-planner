@@ -90,6 +90,17 @@ export const photos = pgTable(
     /** Blob's own path, which is what deletion needs. */
     pathname: text("pathname").notNull(),
     caption: text("caption"),
+    /**
+     * processing -> ready, or processing -> failed once the retries are spent.
+     *
+     * A photo is visible the moment it is uploaded, and the slow work happens
+     * afterwards, so the row has to be able to say "here, but not finished".
+     */
+    status: text("status").notNull().default("processing"),
+    /** How many times a worker has picked this up. Bounds the retrying. */
+    attempts: integer("attempts").notNull().default(0),
+    /** Kept for the logs when a photo ends up failed. */
+    lastError: text("last_error"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("photos_trip_id_idx").on(table.tripId)],

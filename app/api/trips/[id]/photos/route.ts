@@ -12,6 +12,7 @@ import { logError, logInfo } from "@/lib/log";
 import { getViewer, unauthorized, forbidden } from "@/lib/auth";
 import { addPhoto, listPhotos, countPhotos, ownsTrip } from "@/lib/db/photos";
 import { isDatabaseConfigured } from "@/lib/db";
+import { enqueuePhoto, isQueueConfigured } from "@/lib/queue";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -140,8 +141,24 @@ export async function POST(request: Request, { params }: Params) {
       pathname: blob.pathname,
     });
 
+    // Hand the slow half to the queue and answer now. Resizing and captioning
+    // twenty photos inline is how an upload takes a minute and then dies to a
+    // function timeout with nothing saved.
+    if (isQueueConfigured()) {
+      try {
+        const messageId = await enqueuePhoto(photo.id);
+        logInfo("photos.queued", { photoId: photo.id, messageId });
+      } catch (error) {
+        // The file is already saved. A photo stuck on "processing" is a much
+        // better outcome than telling someone their upload failed after it
+        // actually succeeded.
+        logError("photos.enqueue_failed", error, { photoId: photo.id });
+      }
+    }
+
     logInfo("photos.uploaded", { userId: viewer.userId, tripId: id, bytes: file.size });
-    return Response.json({ photo }, { status: 201 });
+    // 202: accepted, not finished. The status field says which.
+    return Response.json({ photo }, { status: 202 });
   } catch (error) {
     logError("photos.upload_failed", error, { userId: viewer.userId, tripId: id });
     return Response.json({ error: "That upload did not work. Try again." }, { status: 500 });

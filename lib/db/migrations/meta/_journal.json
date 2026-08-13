@@ -15,6 +15,13 @@
       "when": 1786626298066,
       "tag": "0001_sad_moira_mactaggert",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786628197656,
+      "tag": "0002_sticky_captain_marvel",
+      "breakpoints": true
     }
   ]
 }
