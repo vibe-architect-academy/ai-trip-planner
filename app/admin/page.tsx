@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { clerkClient } from "@clerk/nextjs/server";
 import { getViewer } from "@/lib/auth";
+import { tripCountsByUser } from "@/lib/db/trips";
+import { isDatabaseConfigured } from "@/lib/db";
 
 /**
  * The admin area.
@@ -29,6 +31,11 @@ export default async function AdminPage() {
   const clerk = await clerkClient();
   const { data: users } = await clerk.users.getUserList({ limit: 100 });
 
+  // One grouped query for everyone, rather than one query per row. With a
+  // hundred users the second shape is a hundred round trips to the database
+  // to render a single table.
+  const tripCounts = isDatabaseConfigured() ? await tripCountsByUser() : new Map();
+
   return (
     <main className="mx-auto w-full max-w-3xl px-5 py-10 sm:py-16">
       <div className="mb-8 flex items-baseline justify-between">
@@ -46,6 +53,7 @@ export default async function AdminPage() {
           <thead className="border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400">
             <tr>
               <th scope="col" className="px-4 py-3 font-medium">Person</th>
+              <th scope="col" className="px-4 py-3 font-medium">Trips</th>
               <th scope="col" className="px-4 py-3 font-medium">Role</th>
               <th scope="col" className="px-4 py-3 font-medium">Status</th>
             </tr>
@@ -57,6 +65,9 @@ export default async function AdminPage() {
                 <tr key={user.id}>
                   <td className="px-4 py-3">
                     {user.primaryEmailAddress?.emailAddress ?? user.username ?? user.id}
+                  </td>
+                  <td className="px-4 py-3 tabular-nums text-slate-600 dark:text-slate-400">
+                    {tripCounts.get(user.id) ?? 0}
                   </td>
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
                     {metadata.role === "admin" ? "Admin" : "User"}
@@ -79,9 +90,6 @@ export default async function AdminPage() {
         </table>
       </div>
 
-      <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">
-        Trip counts arrive with the database in lesson 12.
-      </p>
     </main>
   );
 }

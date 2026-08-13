@@ -22,6 +22,14 @@ export default async function AppHeader() {
       </div>
 
       <div className="flex shrink-0 items-center gap-3 pt-1">
+        {viewer && (
+          <Link
+            href="/trips"
+            className="focus-ring rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400"
+          >
+            Trips
+          </Link>
+        )}
         {viewer?.role === "admin" && (
           <Link
             href="/admin"

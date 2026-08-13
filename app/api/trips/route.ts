@@ -1,29 +1,21 @@
 /**
- * The kitchen.
+ * Trips: list them, and create one.
  *
- * This file never runs in the browser. It runs on the server, which is the
- * only reason GEMINI_API_KEY is safe to read here. The browser sends a
- * destination and a number of days, and gets the itinerary back as it is
- * written, a few words at a time.
+ * Creating a trip and generating its itinerary are one request. The trip row
+ * is written first, then the itinerary streams to the browser while it is
+ * being written, and the finished text is saved when the stream ends. That
+ * ordering matters: if the connection dies halfway, the trip still exists and
+ * can be regenerated, rather than the work vanishing.
  */
 
 import { logError, logInfo } from "@/lib/log";
 import { readSseData, geminiTextFrom } from "@/lib/sse";
 import { getViewer, unauthorized, forbidden } from "@/lib/auth";
+import { createTrip, listTrips, saveItinerary } from "@/lib/db/trips";
+import { isDatabaseConfigured } from "@/lib/db";
 
 const MODEL = "gemini-2.5-flash";
-
-/**
- * How long this function is allowed to run before the platform kills it.
- *
- * A seven day itinerary can take the better part of a minute. The Vercel
- * default is far shorter than that, and a request that gets cut off halfway
- * looks exactly like a bug to whoever was waiting. Two minutes is comfortable
- * headroom, not a target.
- */
 export const maxDuration = 120;
-
-/** How long to wait for the AI to say its first word before giving up. */
 const UPSTREAM_TIMEOUT_MS = 20_000;
 
 function buildPrompt(destination: string, days: number): string {
@@ -36,20 +28,31 @@ function buildPrompt(destination: string, days: number): string {
   ].join(" ");
 }
 
-/** One line of newline-delimited JSON. The browser reads these as they land. */
 function line(value: Record<string, unknown>): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(value) + "\n");
 }
 
-export async function POST(request: Request) {
-  let destination = "";
-  let days = 0;
+export async function GET() {
+  const viewer = await getViewer();
+  if (!viewer) return unauthorized();
+  if (viewer.banned) return forbidden("This account has been suspended.");
+  if (!isDatabaseConfigured()) {
+    return Response.json({ error: "The database is not configured." }, { status: 500 });
+  }
 
   try {
-    // Ask again, here, even though the middleware already turned away anyone
-    // without a session. The middleware protects the route; this protects the
-    // work. Generating costs money, and "who is spending it" is a question the
-    // handler has to be able to answer on its own.
+    return Response.json({ trips: await listTrips(viewer.userId) });
+  } catch (error) {
+    logError("trips.list_failed", error, { userId: viewer.userId });
+    return Response.json({ error: "We could not load your trips." }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  let destination = "";
+  let dayCount = 0;
+
+  try {
     const viewer = await getViewer();
     if (!viewer) return unauthorized();
     if (viewer.banned) return forbidden("This account has been suspended.");
@@ -62,7 +65,7 @@ export async function POST(request: Request) {
     }
 
     destination = String(body.destination ?? "").trim();
-    days = Number(body.days);
+    dayCount = Number(body.days);
 
     if (!destination) {
       return Response.json({ error: "Tell me where you want to go." }, { status: 400 });
@@ -70,18 +73,23 @@ export async function POST(request: Request) {
     if (destination.length > 60) {
       return Response.json({ error: "That destination is too long." }, { status: 400 });
     }
-    if (!Number.isInteger(days) || days < 1 || days > 7) {
+    if (!Number.isInteger(dayCount) || dayCount < 1 || dayCount > 7) {
       return Response.json({ error: "Pick between 1 and 7 days." }, { status: 400 });
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      logError("generate.misconfigured", new Error("GEMINI_API_KEY is not set"));
+    if (!apiKey || !isDatabaseConfigured()) {
+      logError(
+        "trips.misconfigured",
+        new Error(`missing ${!apiKey ? "GEMINI_API_KEY" : "DATABASE_URL"}`),
+      );
       return Response.json(
         { error: "We cannot plan trips right now. Try again shortly." },
         { status: 500 },
       );
     }
+
+    const trip = await createTrip({ userId: viewer.userId, destination, dayCount });
 
     const url =
       `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}` +
@@ -94,20 +102,17 @@ export async function POST(request: Request) {
         headers: { "Content-Type": "application/json" },
         signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
         body: JSON.stringify({
-          contents: [{ parts: [{ text: buildPrompt(destination, days) }] }],
+          contents: [{ parts: [{ text: buildPrompt(destination, dayCount) }] }],
           generationConfig: {
             temperature: 0.7,
             maxOutputTokens: 2000,
-            // Thinking is on by default for 2.5 Flash, and here it buys nothing
-            // except a long silence before the first word. The entire point of
-            // this lesson is that the first word arrives quickly.
             thinkingConfig: { thinkingBudget: 0 },
           },
         }),
       });
     } catch (error) {
       const timedOut = error instanceof Error && error.name === "TimeoutError";
-      logError("generate.upstream_unreachable", error, { destination, days, timedOut });
+      logError("trips.upstream_unreachable", error, { tripId: trip.id, timedOut });
       return Response.json(
         {
           error: timedOut
@@ -119,9 +124,8 @@ export async function POST(request: Request) {
     }
 
     if (!upstream.ok || !upstream.body) {
-      logError("generate.upstream_error", new Error(`AI returned ${upstream.status}`), {
-        destination,
-        days,
+      logError("trips.upstream_error", new Error(`AI returned ${upstream.status}`), {
+        tripId: trip.id,
         status: upstream.status,
         body: (await upstream.text().catch(() => "")).slice(0, 2000),
       });
@@ -132,33 +136,43 @@ export async function POST(request: Request) {
     }
 
     const upstreamBody = upstream.body;
-    let characters = 0;
+    const userId = viewer.userId;
+    let itinerary = "";
 
     const stream = new ReadableStream({
       async start(controller) {
+        // Send the id first so the browser can link to the trip immediately,
+        // before a single word of it has been written.
+        controller.enqueue(line({ tripId: trip.id }));
+
         try {
           for await (const payload of readSseData(upstreamBody)) {
             const text = geminiTextFrom(payload);
             if (!text) continue;
-            characters += text.length;
+            itinerary += text;
             controller.enqueue(line({ text }));
           }
 
-          if (characters === 0) {
-            logError("generate.empty_response", new Error("AI streamed no text"), {
-              destination,
-              days,
+          if (!itinerary.trim()) {
+            logError("trips.empty_response", new Error("AI streamed no text"), {
+              tripId: trip.id,
             });
             controller.enqueue(
               line({ error: "The trip planner came back empty handed. Try again." }),
             );
           } else {
-            logInfo("generate.ok", { userId: viewer.userId, destination, days, characters });
+            await saveItinerary({ tripId: trip.id, userId, rawItinerary: itinerary });
+            controller.enqueue(line({ saved: true }));
+            logInfo("trips.created", { userId, tripId: trip.id, characters: itinerary.length });
           }
         } catch (error) {
-          // The stream broke partway. The browser already has real text on
-          // screen, so send an error line rather than throwing it all away.
-          logError("generate.stream_broke", error, { destination, days, characters });
+          logError("trips.stream_broke", error, { tripId: trip.id });
+          // Keep whatever arrived. A partial trip beats a lost one.
+          if (itinerary.trim()) {
+            await saveItinerary({ tripId: trip.id, userId, rawItinerary: itinerary }).catch(
+              (saveError) => logError("trips.partial_save_failed", saveError, { tripId: trip.id }),
+            );
+          }
           controller.enqueue(
             line({ error: "The connection dropped partway through this trip." }),
           );
@@ -172,13 +186,11 @@ export async function POST(request: Request) {
       headers: {
         "Content-Type": "application/x-ndjson; charset=utf-8",
         "Cache-Control": "no-store",
-        // Tells proxies not to sit on the response waiting for it to finish,
-        // which would undo the entire point of streaming.
         "X-Accel-Buffering": "no",
       },
     });
   } catch (error) {
-    logError("generate.unhandled", error, { destination, days });
+    logError("trips.unhandled", error, { destination, dayCount });
     return Response.json({ error: "Something went wrong on our end." }, { status: 500 });
   }
 }

@@ -13,6 +13,7 @@
  */
 
 import { useState } from "react";
+import Link from "next/link";
 import SearchForm from "@/components/SearchForm";
 import TripResults from "@/components/TripResults";
 
@@ -20,6 +21,8 @@ export default function Planner() {
   const [destination, setDestination] = useState("");
   const [days, setDays] = useState("3");
   const [trip, setTrip] = useState<{ destination: string; itinerary: string } | null>(null);
+  const [tripId, setTripId] = useState("");
+  const [isSaved, setIsSaved] = useState(false);
   const [isPlanning, setIsPlanning] = useState(false);
   const [error, setError] = useState("");
 
@@ -27,11 +30,13 @@ export default function Planner() {
     setIsPlanning(true);
     setError("");
     setTrip(null);
+    setTripId("");
+    setIsSaved(false);
 
     const asked = destination.trim() || "Kyoto";
 
     try {
-      const response = await fetch("/api/generate", {
+      const response = await fetch("/api/trips", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ destination: asked, days: Number(days) || 3 }),
@@ -64,7 +69,7 @@ export default function Planner() {
 
         for (const raw of lines) {
           if (!raw.trim()) continue;
-          let event: { text?: string; error?: string };
+          let event: { text?: string; error?: string; tripId?: string; saved?: boolean };
           try {
             event = JSON.parse(raw);
           } catch {
@@ -74,6 +79,10 @@ export default function Planner() {
             setError(event.error);
             continue;
           }
+          // The id arrives before the first word, so the trip is linkable
+          // while it is still being written.
+          if (event.tripId) setTripId(event.tripId);
+          if (event.saved) setIsSaved(true);
           if (event.text) {
             itinerary += event.text;
             // Hand it over on every chunk. This is the whole point: the days
@@ -115,6 +124,19 @@ export default function Planner() {
       )}
 
       {trip && <TripResults destination={trip.destination} itinerary={trip.itinerary} />}
+
+      {isSaved && tripId && (
+        <p className="mt-4 text-sm text-slate-600 dark:text-slate-400">
+          Saved.{" "}
+          <Link
+            href={`/trips/${tripId}`}
+            className="focus-ring rounded font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+          >
+            This trip has its own page now
+          </Link>
+          , and it will still be there tomorrow.
+        </p>
+      )}
     </>
   );
 }
