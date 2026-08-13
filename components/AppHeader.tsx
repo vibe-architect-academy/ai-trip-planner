@@ -6,9 +6,9 @@ export default async function AppHeader() {
   const viewer = await getViewer();
 
   return (
-    <header className="mb-8 flex items-start justify-between gap-4">
-      <div>
-        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight">
+    <header className="mb-8 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+      <div className="min-w-0">
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl lg:text-4xl">
           <Link href="/" className="focus-ring rounded">
             AI Trip Planner{" "}
             <span className="text-indigo-600 dark:text-indigo-400" aria-hidden="true">
@@ -21,11 +21,15 @@ export default async function AppHeader() {
         </p>
       </div>
 
-      <div className="flex shrink-0 items-center gap-3 pt-1">
+      {/*
+        min-h-11 is 44px, which is the smallest thing a finger reliably hits.
+        A 28px text link is fine with a mouse and a coin toss on a phone.
+      */}
+      <nav className="flex shrink-0 items-center gap-1">
         {viewer && (
           <Link
             href="/trips"
-            className="focus-ring rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400"
+            className="focus-ring inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400"
           >
             Trips
           </Link>
@@ -33,13 +37,15 @@ export default async function AppHeader() {
         {viewer?.role === "admin" && (
           <Link
             href="/admin"
-            className="focus-ring rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400"
+            className="focus-ring inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400"
           >
             Admin
           </Link>
         )}
-        <UserButton />
-      </div>
+        <div className="ml-1 flex min-h-11 items-center">
+          <UserButton />
+        </div>
+      </nav>
     </header>
   );
 }

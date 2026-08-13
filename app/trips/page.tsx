@@ -15,7 +15,7 @@ export default async function TripsPage() {
   const trips = isDatabaseConfigured() ? await listTrips(viewer.userId) : [];
 
   return (
-    <main className="mx-auto w-full max-w-xl px-5 py-10 sm:py-16">
+    <main className="mx-auto w-full max-w-xl px-4 py-8 sm:px-6 sm:py-14 lg:max-w-5xl">
       <AppHeader />
 
       <div className="mb-5 flex items-baseline justify-between">
@@ -33,12 +33,12 @@ export default async function TripsPage() {
           No trips yet. Plan one and it will be here when you come back.
         </p>
       ) : (
-        <ul className="space-y-3">
+        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
           {trips.map((trip) => (
             <li key={trip.id}>
               <Link
                 href={`/trips/${trip.id}`}
-                className="focus-ring block rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-4 transition-colors hover:border-indigo-400 dark:hover:border-indigo-500"
+                className="focus-ring flex min-h-20 flex-col justify-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-4 transition-colors hover:border-indigo-400 dark:hover:border-indigo-500"
               >
                 <span className="font-semibold">{trip.title ?? trip.destination}</span>
                 <span className="mt-1 block text-sm text-slate-500 dark:text-slate-400">

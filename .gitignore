@@ -39,5 +39,8 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
+# clerk configuration (can include secrets)
+/.clerk/
+
 # TypeScript incremental build cache. A build artifact, not source.
 *.tsbuildinfo

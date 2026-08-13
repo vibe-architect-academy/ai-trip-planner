@@ -2,13 +2,21 @@ import type { Day } from "@/lib/itinerary";
 
 export default function DayCard({ day }: { day: Day }) {
   return (
-    <article className="border-t border-slate-200 dark:border-slate-700 pt-5 first:border-t-0 first:pt-0">
-      <h3 className="text-lg font-semibold text-indigo-700 dark:text-indigo-400">
+    /*
+      Each card is self-contained. The old version leaned on a top border to
+      separate stacked days, which stops meaning anything the moment they sit
+      side by side in a grid.
+    */
+    <article className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/40 p-4">
+      <h3 className="text-base font-semibold text-indigo-700 dark:text-indigo-400">
         {day.heading}
       </h3>
-      <ul className="mt-2 space-y-1.5">
+      <ul className="mt-2 space-y-2">
         {day.items.map((item, index) => (
-          <li key={index} className="text-slate-700 dark:text-slate-300">
+          <li
+            key={index}
+            className="text-[15px] leading-relaxed text-slate-700 dark:text-slate-300"
+          >
             {item.label && (
               <span className="font-semibold text-slate-900 dark:text-slate-100">
                 {item.label}:{" "}

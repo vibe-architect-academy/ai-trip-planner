@@ -57,7 +57,7 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
   const photos = await listPhotos(id, viewer.userId);
 
   return (
-    <main className="mx-auto w-full max-w-xl px-5 py-10 sm:py-16">
+    <main className="mx-auto w-full max-w-xl px-4 py-8 sm:px-6 sm:py-14 lg:max-w-5xl">
       <AppHeader />
 
       <Link
