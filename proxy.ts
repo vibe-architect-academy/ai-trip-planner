@@ -46,6 +46,7 @@ const isPublicRoute = createRouteMatcher([
    * open it, so the token in the URL is the credential rather than a session.
    */
   "/share/(.*)",
+  "/privacy",
 ]);
 
 const isAdminRoute = createRouteMatcher(["/admin(.*)"]);

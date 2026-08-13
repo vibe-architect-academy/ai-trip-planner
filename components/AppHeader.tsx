@@ -44,6 +44,14 @@ export default async function AppHeader() {
             {t("nav.admin")}
           </Link>
         )}
+        {viewer && (
+          <Link
+            href="/settings"
+            className="focus-ring inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400"
+          >
+            Settings
+          </Link>
+        )}
         <LanguagePicker locale={locale} label={t("language.label")} />
         <div className="ml-1 flex min-h-11 items-center">
           <UserButton />
