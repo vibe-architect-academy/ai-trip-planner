@@ -1,4 +1,4 @@
-import { Client } from "@upstash/qstash";
+import { Client, Receiver } from "@upstash/qstash";
 import { siteUrl } from "./site";
 
 /**
@@ -58,7 +58,50 @@ export async function enqueuePhoto(photoId: string): Promise<string> {
     // Three attempts, spaced out by QStash. Most failures here are the AI
     // service being briefly busy, and those fix themselves given a moment.
     retries: 3,
+    /*
+     * Ten deliveries a minute, across everybody, and at most two at once.
+     *
+     * This is the number that stops one person uploading twenty photos from
+     * spending the whole AI quota and making the app fail for everyone else
+     * at the same time. The limit belongs here rather than in the worker,
+     * because the worker only ever sees the message it was handed and has no
+     * idea how many others are in flight.
+     *
+     * `rate` with `period` rather than `ratePerSecond`, which is deprecated
+     * and would have meant writing ten-per-minute as the fraction 0.1666.
+     */
+    flowControl: { key: "photo-captions", rate: 10, period: "1m", parallelism: 2 },
   });
 
   return messageId;
+}
+
+let receiver: Receiver | null = null;
+
+/**
+ * Proves a request really came from QStash.
+ *
+ * Without this the worker is a public URL that does paid AI work on demand,
+ * and the only thing standing between it and a stranger's script is that
+ * nobody has guessed the path yet. QStash signs every request; this checks
+ * the signature against the two rotating keys it publishes.
+ *
+ * Returns false when the keys are missing, which fails closed. An
+ * unverifiable request is refused rather than waved through.
+ */
+export async function isFromQueue(request: Request, body: string): Promise<boolean> {
+  const currentSigningKey = process.env.QSTASH_CURRENT_SIGNING_KEY;
+  const nextSigningKey = process.env.QSTASH_NEXT_SIGNING_KEY;
+  if (!currentSigningKey || !nextSigningKey) return false;
+
+  const signature = request.headers.get("upstash-signature");
+  if (!signature) return false;
+
+  receiver ??= new Receiver({ currentSigningKey, nextSigningKey });
+
+  try {
+    return await receiver.verify({ signature, body });
+  } catch {
+    return false;
+  }
 }

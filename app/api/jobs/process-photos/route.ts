@@ -22,6 +22,7 @@ import {
   MAX_ATTEMPTS,
 } from "@/lib/db/photos";
 import { isDatabaseConfigured } from "@/lib/db";
+import { isFromQueue } from "@/lib/queue";
 
 export const maxDuration = 120;
 
@@ -65,14 +66,32 @@ async function captionFor(imageBase64: string, mimeType: string): Promise<string
 }
 
 export async function POST(request: Request) {
-  if (!isDatabaseConfigured()) {
-    return Response.json({ error: "not configured" }, { status: 500 });
-  }
-
   let photoId = "";
 
   try {
-    const body = await request.json().catch(() => ({}));
+    /*
+     * Read the body as text first, because the signature covers the exact
+     * bytes that were sent. Parsing to JSON and re-serialising produces a
+     * different string, and it will not verify.
+     */
+    const raw = await request.text();
+
+    /*
+     * The signature is checked before anything else, including whether this
+     * server is even configured. Answering "not configured" to an unsigned
+     * caller tells a stranger the endpoint is real and something about its
+     * state; a flat refusal tells them nothing.
+     */
+    if (!(await isFromQueue(request, raw))) {
+      logError("photos.job_unsigned", new Error("bad or missing QStash signature"));
+      return Response.json({ error: "not allowed" }, { status: 401 });
+    }
+
+    if (!isDatabaseConfigured()) {
+      return Response.json({ error: "not configured" }, { status: 500 });
+    }
+
+    const body = JSON.parse(raw || "{}");
     photoId = String(body.photoId ?? "");
     if (!photoId) return Response.json({ error: "no photoId" }, { status: 400 });
 

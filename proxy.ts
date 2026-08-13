@@ -25,6 +25,16 @@ const isPublicRoute = createRouteMatcher([
   // check in front of a cacheable response defeats the caching, because the
   // CDN can no longer answer without asking us who is calling.
   "/api/destinations",
+  /*
+   * Background workers. QStash is not a person and has no session, so a
+   * sign-in check here would redirect every job to a login page and nothing
+   * would ever be processed.
+   *
+   * "Public" here means only that Clerk does not guard it. These routes are
+   * not unguarded: each one verifies QStash's signature and refuses anything
+   * it cannot prove came from the queue.
+   */
+  "/api/jobs/(.*)",
 ]);
 
 const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
