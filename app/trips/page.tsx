@@ -5,7 +5,7 @@ import { getViewer } from "@/lib/auth";
 import { listTrips } from "@/lib/db/trips";
 import { isDatabaseConfigured } from "@/lib/db";
 
-export const metadata = { title: "Your trips" };
+export const metadata = { title: "Your trips", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 export default async function TripsPage() {

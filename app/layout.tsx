@@ -1,10 +1,37 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
+import { siteUrl, siteName, siteDescription } from "@/lib/site";
 import "./globals.css";
 
+/**
+ * Defaults every page inherits, so a new page is discoverable and shareable
+ * without anyone remembering to wire it up. Pages override the title and
+ * description; the rest carries down.
+ */
 export const metadata: Metadata = {
-  title: "AI Trip Planner",
-  description: "Describe the trip. Get a real plan, day by day.",
+  // Without this, every relative URL below stays relative, and a relative
+  // og:image is ignored by every scraper that reads it.
+  metadataBase: new URL(siteUrl),
+  title: {
+    default: siteName,
+    // Page titles become "Your trips | AI Trip Planner" on their own.
+    template: `%s | ${siteName}`,
+  },
+  description: siteDescription,
+  applicationName: siteName,
+  openGraph: {
+    type: "website",
+    siteName,
+    title: siteName,
+    description: siteDescription,
+    url: siteUrl,
+    locale: "en",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: siteName,
+    description: siteDescription,
+  },
 };
 
 export default function RootLayout({

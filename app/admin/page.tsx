@@ -13,7 +13,7 @@ import { isDatabaseConfigured } from "@/lib/db";
  * is the day only one of them is still doing its job.
  */
 
-export const metadata = { title: "Admin" };
+export const metadata = { title: "Admin", robots: { index: false, follow: false } };
 
 // Reads live user state, so there is nothing here worth prerendering.
 export const dynamic = "force-dynamic";

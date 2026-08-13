@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
@@ -9,6 +10,36 @@ import { listPhotos } from "@/lib/db/photos";
 import { isDatabaseConfigured } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * The page's own title, so a browser tab and a bookmark say which trip this
+ * is rather than repeating the app name.
+ *
+ * It is also marked noindex, and that is not belt-and-braces: robots.txt asks
+ * crawlers not to visit, while this tells the ones that arrive anyway not to
+ * index what they found. Trips are private until sharing exists.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const viewer = await getViewer();
+  const { id } = await params;
+
+  if (!viewer || !isDatabaseConfigured()) {
+    return { title: "Trip", robots: { index: false, follow: false } };
+  }
+
+  const trip = await getTrip(id, viewer.userId);
+  return {
+    title: trip?.title ?? "Trip",
+    description: trip
+      ? `A ${trip.dayCount}-day itinerary for ${trip.destination}.`
+      : undefined,
+    robots: { index: false, follow: false },
+  };
+}
 
 export default async function TripPage({ params }: { params: Promise<{ id: string }> }) {
   const viewer = await getViewer();
