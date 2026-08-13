@@ -69,8 +69,8 @@ way.
 
 ## The stack
 
-Next.js on Vercel · Clerk · Neon Postgres · Vercel Blob · QStash · Gemini with
-a DeepSeek fallback · Stripe (test mode) · Resend · Sentry · PostHog.
+Next.js on Vercel · Clerk · Neon Postgres · Vercel Blob · QStash · an AI ladder
+(Cerebras, Gemini, DeepSeek) · Stripe (test mode) · Resend · Sentry · PostHog.
 
 All free tiers. The whole thing costs roughly nothing to run at this size.
 
@@ -91,6 +91,22 @@ and generation is unavailable while the rest of the app works, no
 
 `docker compose up` runs the app plus a real Postgres with no hosted account at
 all.
+
+## A note on which AI answers
+
+The course teaches Gemini, and this repo still supports it. The live demo runs
+**Cerebras** first, set by `AI_PROVIDER_ORDER` rather than by a code change.
+
+The reason is worth stating plainly, because it is a trap anyone can walk into:
+Gemini's free tier exists only on a Google Cloud project with **billing
+disabled**. On an account that already pays Google for something else there is
+no free tier at all, and every call is billed. A student following the course
+usually has no billing enabled and gets exactly what the lesson describes.
+
+Which provider answers is a fact about whose account is paying, not about how
+the app should be built, so it lives in an environment variable. That is also
+lesson 21 ceasing to be theoretical: the fallback ladder is not a hypothetical
+about resilience, it is the reason this deployment runs at all. See `docs/ai.md`.
 
 ## A note on the payment provider
 

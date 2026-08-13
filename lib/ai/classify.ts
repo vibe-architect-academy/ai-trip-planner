@@ -8,7 +8,7 @@
  * you were given.
  */
 
-import { ladderFor, keyFor, type ProviderName } from "./provider";
+import { ladderFor, type ModelChoice } from "./provider";
 import { logError, logInfo } from "@/lib/log";
 
 export const TRIP_TYPES = [
@@ -34,14 +34,9 @@ const SCHEMA = {
   required: ["tripType", "summary"],
 } as const;
 
-async function askGemini(
-  model: string,
-  apiKey: string,
-  prompt: string,
-  maxOutputTokens: number,
-): Promise<string> {
+async function askGemini(choice: ModelChoice, prompt: string): Promise<string> {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    `${choice.baseUrl}/models/${choice.model}:generateContent?key=${choice.apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -50,7 +45,7 @@ async function askGemini(
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
           temperature: 0.2,
-          maxOutputTokens,
+          maxOutputTokens: choice.maxOutputTokens,
           thinkingConfig: { thinkingBudget: 0 },
           // Ask for JSON and hand over the schema, so the model is constrained
           // rather than merely instructed. Instructions get ignored; schemas
@@ -62,36 +57,34 @@ async function askGemini(
     },
   );
 
-  if (!response.ok) throw new Error(`gemini ${model} returned ${response.status}`);
+  if (!response.ok) throw new Error(`${choice.provider} ${choice.model} returned ${response.status}`);
   const data = await response.json();
   return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 }
 
-async function askDeepSeek(
-  model: string,
-  apiKey: string,
-  prompt: string,
-  maxOutputTokens: number,
-): Promise<string> {
-  const response = await fetch("https://api.deepseek.com/chat/completions", {
+/** The OpenAI dialect, spoken by Cerebras and DeepSeek alike. */
+async function askOpenAiCompatible(choice: ModelChoice, prompt: string): Promise<string> {
+  const response = await fetch(`${choice.baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${choice.apiKey}`,
     },
     signal: AbortSignal.timeout(15_000),
     body: JSON.stringify({
-      model,
+      model: choice.model,
       messages: [{ role: "user", content: prompt }],
-      max_tokens: maxOutputTokens,
+      max_tokens: choice.maxOutputTokens,
       temperature: 0.2,
-      // DeepSeek speaks the OpenAI dialect, which has JSON mode but not a
-      // schema, so the shape is described in the prompt and validated below.
+      // This dialect has a JSON mode but no schema, so the shape is described
+      // in the prompt and validated below. Trust the check, not the promise.
       response_format: { type: "json_object" },
     }),
   });
 
-  if (!response.ok) throw new Error(`deepseek ${model} returned ${response.status}`);
+  if (!response.ok) {
+    throw new Error(`${choice.provider} ${choice.model} returned ${response.status}`);
+  }
   const data = await response.json();
   return data?.choices?.[0]?.message?.content ?? "";
 }
@@ -130,14 +123,11 @@ export async function describeTrip(input: {
   ].join(" ");
 
   for (const choice of ladderFor("classify")) {
-    const apiKey = keyFor(choice.provider as ProviderName);
-    if (!apiKey) continue;
-
     try {
       const text =
-        choice.provider === "gemini"
-          ? await askGemini(choice.model, apiKey, prompt, choice.maxOutputTokens)
-          : await askDeepSeek(choice.model, apiKey, prompt, choice.maxOutputTokens);
+        choice.kind === "gemini"
+          ? await askGemini(choice, prompt)
+          : await askOpenAiCompatible(choice, prompt);
 
       const parsed = parse(text);
       if (parsed) {

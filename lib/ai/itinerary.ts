@@ -13,7 +13,7 @@
  * still enforced; it is just enforced by checking rather than by waiting.
  */
 
-import { ladderFor, keyFor, ITINERARY_SYSTEM_PROMPT } from "./provider";
+import { ladderFor, ITINERARY_SYSTEM_PROMPT, type ModelChoice } from "./provider";
 import { readSseData, geminiTextFrom } from "@/lib/sse";
 import { parseItinerary } from "@/lib/itinerary";
 import { logError } from "@/lib/log";
@@ -34,15 +34,13 @@ function userPrompt(destination: string, days: number, language: string): string
 }
 
 async function* geminiChunks(
-  model: string,
-  apiKey: string,
+  choice: ModelChoice,
   destination: string,
   days: number,
   language: string,
 ): AsyncGenerator<string> {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}` +
-      `:streamGenerateContent?alt=sse&key=${apiKey}`,
+    `${choice.baseUrl}/models/${choice.model}:streamGenerateContent?alt=sse&key=${choice.apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -52,7 +50,7 @@ async function* geminiChunks(
         contents: [{ parts: [{ text: userPrompt(destination, days, language) }] }],
         generationConfig: {
           temperature: 0.7,
-          maxOutputTokens: 2000,
+          maxOutputTokens: choice.maxOutputTokens,
           thinkingConfig: { thinkingBudget: 0 },
         },
       }),
@@ -60,7 +58,7 @@ async function* geminiChunks(
   );
 
   if (!response.ok || !response.body) {
-    throw new Error(`gemini ${model} returned ${response.status}`);
+    throw new Error(`${choice.provider} ${choice.model} returned ${response.status}`);
   }
 
   for await (const payload of readSseData(response.body)) {
@@ -69,21 +67,30 @@ async function* geminiChunks(
   }
 }
 
-async function* deepseekChunks(
-  model: string,
-  apiKey: string,
+/**
+ * The OpenAI chat-completions dialect, which Cerebras and DeepSeek both speak.
+ *
+ * One function rather than one per vendor. The differences between them are a
+ * base URL and a model name, and writing a second near-identical client is how
+ * a fix lands in one of them and not the other.
+ */
+async function* openAiChunks(
+  choice: ModelChoice,
   destination: string,
   days: number,
   language: string,
 ): AsyncGenerator<string> {
-  const response = await fetch("https://api.deepseek.com/chat/completions", {
+  const response = await fetch(`${choice.baseUrl}/chat/completions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${choice.apiKey}`,
+    },
     signal: AbortSignal.timeout(20_000),
     body: JSON.stringify({
-      model,
+      model: choice.model,
       stream: true,
-      max_tokens: 2000,
+      max_tokens: choice.maxOutputTokens,
       temperature: 0.7,
       messages: [
         { role: "system", content: ITINERARY_SYSTEM_PROMPT },
@@ -93,7 +100,7 @@ async function* deepseekChunks(
   });
 
   if (!response.ok || !response.body) {
-    throw new Error(`deepseek ${model} returned ${response.status}`);
+    throw new Error(`${choice.provider} ${choice.model} returned ${response.status}`);
   }
 
   // Same SSE reader as Gemini. Only the shape inside each event differs.
@@ -110,10 +117,10 @@ async function* deepseekChunks(
 /**
  * The first provider that answers wins.
  *
- * Only the call that opens the stream is retried down the ladder. Once text
- * has started arriving, a failure is handled by the caller keeping what it
- * has, because switching providers mid-itinerary would splice two different
- * trips together.
+ * Only the call that opens the stream falls down the ladder. Once text has
+ * started arriving, a failure is handled by the caller keeping what it has,
+ * because switching providers mid-itinerary would splice two different trips
+ * together.
  */
 export async function streamItinerary(input: {
   destination: string;
@@ -126,16 +133,13 @@ export async function streamItinerary(input: {
   let lastError: unknown = null;
 
   for (const choice of ladder) {
-    const apiKey = keyFor(choice.provider);
-    if (!apiKey) continue;
-
     try {
       const chunks =
-        choice.provider === "gemini"
-          ? geminiChunks(choice.model, apiKey, input.destination, input.days, input.language)
-          : deepseekChunks(choice.model, apiKey, input.destination, input.days, input.language);
+        choice.kind === "gemini"
+          ? geminiChunks(choice, input.destination, input.days, input.language)
+          : openAiChunks(choice, input.destination, input.days, input.language);
 
-      // Pull the first chunk here so a provider that is going to refuse does
+      // Pull the first chunk here, so a provider that is going to refuse does
       // so now, while falling through to the next one is still possible.
       const iterator = chunks[Symbol.asyncIterator]();
       const first = await iterator.next();
