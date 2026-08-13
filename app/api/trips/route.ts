@@ -9,28 +9,15 @@
  */
 
 import { logError, logInfo } from "@/lib/log";
-import { readSseData, geminiTextFrom } from "@/lib/sse";
 import { getViewer, unauthorized, forbidden } from "@/lib/auth";
+import { streamItinerary, checkItinerary } from "@/lib/ai/itinerary";
+import { isAiConfigured } from "@/lib/ai/provider";
+import { describeTrip } from "@/lib/ai/classify";
 import { createTrip, listTrips, saveItinerary, markTripReady } from "@/lib/db/trips";
 import { isDatabaseConfigured } from "@/lib/db";
 import { getLocale, languageForPrompt } from "@/lib/i18n";
 
-const MODEL = "gemini-2.5-flash";
 export const maxDuration = 120;
-const UPSTREAM_TIMEOUT_MS = 20_000;
-
-function buildPrompt(destination: string, days: number, language: string): string {
-  return [
-    `Plan a ${days}-day trip to ${destination}.`,
-    "For each day give a morning activity, an afternoon activity, an evening",
-    "activity, and a restaurant recommendation, with specific real places.",
-    'Format: a heading per day like "### Day 1", then 4 short bullet points.',
-    "No intro or outro text, start directly with Day 1.",
-    // Translating the buttons and leaving the itinerary in English is a half
-    // finished job. The content is the part they came for.
-    `Write the entire itinerary in ${language}, including the day headings.`,
-  ].join(" ");
-}
 
 function line(value: Record<string, unknown>): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(value) + "\n");
@@ -89,12 +76,8 @@ export async function POST(request: Request) {
       return Response.json({ error: "Pick between 1 and 7 days." }, { status: 400 });
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey || !isDatabaseConfigured()) {
-      logError(
-        "trips.misconfigured",
-        new Error(`missing ${!apiKey ? "GEMINI_API_KEY" : "DATABASE_URL"}`),
-      );
+    if (!isAiConfigured() || !isDatabaseConfigured()) {
+      logError("trips.misconfigured", new Error("no AI provider or no database"));
       return Response.json(
         { error: "We cannot plan trips right now. Try again shortly." },
         { status: 500 },
@@ -104,51 +87,17 @@ export async function POST(request: Request) {
     const language = languageForPrompt(await getLocale());
     const trip = await createTrip({ userId: viewer.userId, destination, dayCount });
 
-    const url =
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}` +
-      `:streamGenerateContent?alt=sse&key=${apiKey}`;
-
-    let upstream: Response;
+    let source;
     try {
-      upstream = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: buildPrompt(destination, dayCount, language) }] }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 2000,
-            thinkingConfig: { thinkingBudget: 0 },
-          },
-        }),
-      });
+      source = await streamItinerary({ destination, days: dayCount, language });
     } catch (error) {
-      const timedOut = error instanceof Error && error.name === "TimeoutError";
-      logError("trips.upstream_unreachable", error, { tripId: trip.id, timedOut });
-      return Response.json(
-        {
-          error: timedOut
-            ? "That is taking longer than usual. Give it another try."
-            : "We could not reach the trip planner. Try again in a moment.",
-        },
-        { status: 504 },
-      );
-    }
-
-    if (!upstream.ok || !upstream.body) {
-      logError("trips.upstream_error", new Error(`AI returned ${upstream.status}`), {
-        tripId: trip.id,
-        status: upstream.status,
-        body: (await upstream.text().catch(() => "")).slice(0, 2000),
-      });
+      logError("trips.no_provider_answered", error, { tripId: trip.id });
       return Response.json(
         { error: "The trip planner could not plan that one. Try again." },
         { status: 502 },
       );
     }
 
-    const upstreamBody = upstream.body;
     const userId = viewer.userId;
     let itinerary = "";
 
@@ -159,9 +108,7 @@ export async function POST(request: Request) {
         controller.enqueue(line({ tripId: trip.id }));
 
         try {
-          for await (const payload of readSseData(upstreamBody)) {
-            const text = geminiTextFrom(payload);
-            if (!text) continue;
+          for await (const text of source.chunks) {
             itinerary += text;
             controller.enqueue(line({ text }));
           }
@@ -174,13 +121,39 @@ export async function POST(request: Request) {
               line({ error: "The trip planner came back empty handed. Try again." }),
             );
           } else {
+            /*
+             * Did we get the thing we asked for, or just a reply? A chatty
+             * paragraph is a successful API call and a broken page, so this
+             * is checked rather than assumed. It is logged rather than
+             * refused: the text is already on the reader's screen, and
+             * snatching it back over a missing label helps nobody.
+             */
+            const check = checkItinerary(itinerary, dayCount);
+            if (!check.ok) {
+              logError("trips.shape_off", new Error(check.problems.join("; ")), {
+                tripId: trip.id,
+                model: source.model,
+              });
+            }
+
             await saveItinerary({ tripId: trip.id, userId, rawItinerary: itinerary });
             // generating -> ready, and only from generating. If the owner
             // archived this while the AI was still writing, this does nothing
             // and the archive stands.
             const becameReady = await markTripReady(trip.id);
             controller.enqueue(line({ saved: true, state: becameReady ? "ready" : null }));
-            logInfo("trips.created", { userId, tripId: trip.id, characters: itinerary.length });
+            logInfo("trips.created", {
+              userId,
+              tripId: trip.id,
+              provider: source.provider,
+              model: source.model,
+              characters: itinerary.length,
+            });
+
+            // The cheap model's turn, after the reader already has what they
+            // came for. A label is a nice-to-have and is never allowed to
+            // delay or break the thing that matters.
+            describeTrip({ destination, days: dayCount }).catch(() => null);
           }
         } catch (error) {
           logError("trips.stream_broke", error, { tripId: trip.id });
