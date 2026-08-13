@@ -11,7 +11,7 @@
 import { logError, logInfo } from "@/lib/log";
 import { readSseData, geminiTextFrom } from "@/lib/sse";
 import { getViewer, unauthorized, forbidden } from "@/lib/auth";
-import { createTrip, listTrips, saveItinerary } from "@/lib/db/trips";
+import { createTrip, listTrips, saveItinerary, markTripReady } from "@/lib/db/trips";
 import { isDatabaseConfigured } from "@/lib/db";
 import { getLocale, languageForPrompt } from "@/lib/i18n";
 
@@ -175,7 +175,11 @@ export async function POST(request: Request) {
             );
           } else {
             await saveItinerary({ tripId: trip.id, userId, rawItinerary: itinerary });
-            controller.enqueue(line({ saved: true }));
+            // generating -> ready, and only from generating. If the owner
+            // archived this while the AI was still writing, this does nothing
+            // and the archive stands.
+            const becameReady = await markTripReady(trip.id);
+            controller.enqueue(line({ saved: true, state: becameReady ? "ready" : null }));
             logInfo("trips.created", { userId, tripId: trip.id, characters: itinerary.length });
           }
         } catch (error) {

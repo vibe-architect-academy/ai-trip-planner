@@ -31,6 +31,14 @@ export const trips = pgTable(
     destination: text("destination").notNull(),
     dayCount: integer("day_count").notNull(),
     title: text("title"),
+    /**
+     * Where this trip is in its lifecycle. See lib/trip-state.ts, which owns
+     * the transitions. Stored as text rather than an enum so adding a state
+     * later is a code change, not a migration that locks the table.
+     */
+    state: text("state").notNull().default("draft"),
+    /** When it was shared, so an unshare can be told from never-shared. */
+    sharedAt: timestamp("shared_at", { withTimezone: true }),
     /** The raw text the model produced, kept so a trip can be re-rendered. */
     rawItinerary: text("raw_itinerary"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

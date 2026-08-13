@@ -4,6 +4,9 @@ import { notFound, redirect } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import DayCard from "@/components/DayCard";
 import PhotoStrip from "@/components/PhotoStrip";
+import StateBadge from "@/components/StateBadge";
+import TripActions from "@/components/TripActions";
+import { isTripState } from "@/lib/trip-state";
 import { getViewer } from "@/lib/auth";
 import { getTrip } from "@/lib/db/trips";
 import { listPhotos } from "@/lib/db/photos";
@@ -57,6 +60,7 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
 
   const photos = await listPhotos(id, viewer.userId);
   const t = translator(await getLocale());
+  const state = isTripState(trip.state) ? trip.state : "draft";
 
   return (
     <main className="mx-auto w-full max-w-xl px-4 py-8 sm:px-6 sm:py-14 lg:max-w-5xl">
@@ -69,9 +73,14 @@ export default async function TripPage({ params }: { params: Promise<{ id: strin
         {t("trips.back")}
       </Link>
 
-      <h2 className="mt-3 text-2xl font-bold tracking-tight">
-        {trip.title ?? trip.destination}
-      </h2>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <h2 className="text-2xl font-bold tracking-tight">
+          {trip.title ?? trip.destination}
+        </h2>
+        <StateBadge state={state} />
+      </div>
+
+      <TripActions tripId={trip.id} state={state} />
 
       <section className="mt-6 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-5 sm:p-6 shadow-sm">
         <div className="space-y-5">

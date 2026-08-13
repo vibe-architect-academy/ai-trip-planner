@@ -5,6 +5,8 @@ import { getViewer } from "@/lib/auth";
 import { listTrips } from "@/lib/db/trips";
 import { isDatabaseConfigured } from "@/lib/db";
 import { getLocale, translator } from "@/lib/i18n";
+import StateBadge from "@/components/StateBadge";
+import { isTripState } from "@/lib/trip-state";
 
 export const metadata = { title: "Your trips", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
@@ -43,7 +45,10 @@ export default async function TripsPage() {
                 href={`/trips/${trip.id}`}
                 className="focus-ring flex min-h-20 flex-col justify-center rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 p-4 transition-colors hover:border-indigo-400 dark:hover:border-indigo-500"
               >
-                <span className="font-semibold">{trip.title ?? trip.destination}</span>
+                <span className="flex items-center justify-between gap-2">
+                  <span className="font-semibold">{trip.title ?? trip.destination}</span>
+                  <StateBadge state={isTripState(trip.state) ? trip.state : "draft"} />
+                </span>
                 <span className="mt-1 block text-sm text-slate-500 dark:text-slate-400">
                   {t("trip.days", { count: trip.dayCount, destination: trip.destination })}
                 </span>

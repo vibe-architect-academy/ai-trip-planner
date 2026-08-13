@@ -2,6 +2,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "./index";
 import { trips, days, activities, type Trip } from "./schema";
 import { parseItinerary } from "@/lib/itinerary";
+import { canTransition, type TripState } from "@/lib/trip-state";
 
 /**
  * Everything that reads or writes a trip.
@@ -45,10 +46,67 @@ export async function createTrip(input: {
       destination: input.destination,
       dayCount: input.dayCount,
       title: titleFor(input.destination, input.dayCount),
+      // Created and immediately generating. A trip that exists but has never
+      // been asked for anything is a state nothing in this app produces.
+      state: "generating",
     })
     .returning();
 
   return trip;
+}
+
+/**
+ * Moves a trip from one state to another, refusing anything the table forbids.
+ *
+ * The current state is part of the WHERE clause, not something read first and
+ * checked in code. Two requests arriving together would both pass a read-then-
+ * check; only one of them can win an UPDATE that names the state it expects.
+ *
+ * Returns null when the move was refused, which is the caller's cue to answer
+ * 409 rather than pretend it worked.
+ */
+export async function transitionTrip(input: {
+  tripId: string;
+  userId: string;
+  from: TripState;
+  to: TripState;
+  extra?: Partial<{ sharedAt: Date | null }>;
+}): Promise<Trip | null> {
+  if (!canTransition(input.from, input.to)) return null;
+
+  const [trip] = await db()
+    .update(trips)
+    .set({ state: input.to, updatedAt: new Date(), ...input.extra })
+    .where(
+      and(
+        eq(trips.id, input.tripId),
+        eq(trips.userId, input.userId),
+        // The guard. If something already moved this trip, this matches
+        // nothing and the update is a no-op instead of a silent overwrite.
+        eq(trips.state, input.from),
+      ),
+    )
+    .returning();
+
+  return trip ?? null;
+}
+
+/**
+ * The background job's only move: generating -> ready.
+ *
+ * Not scoped by user, because the worker has no session, and deliberately
+ * narrow. If the owner archived the trip while the AI was still writing, this
+ * matches nothing and the archive stands, rather than a finished job quietly
+ * resurrecting a trip somebody put away.
+ */
+export async function markTripReady(tripId: string): Promise<boolean> {
+  const rows = await db()
+    .update(trips)
+    .set({ state: "ready", updatedAt: new Date() })
+    .where(and(eq(trips.id, tripId), eq(trips.state, "generating")))
+    .returning({ id: trips.id });
+
+  return rows.length > 0;
 }
 
 /**
