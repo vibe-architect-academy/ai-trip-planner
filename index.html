@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Trip Planner</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: linear-gradient(160deg, #f8fafc 0%, #eef2ff 100%);
+    min-height: 100vh; color: #1e293b; padding: 40px 20px;
+  }
+  .wrap { max-width: 560px; margin: 0 auto; }
+  h1 { font-size: 32px; letter-spacing: -0.5px; margin-bottom: 6px; }
+  h1 .spark { color: #4f46e5; }
+  .sub { color: #64748b; margin-bottom: 28px; font-size: 15px; }
+  .card {
+    background: #fff; border: 1px solid #e2e8f0; border-radius: 14px;
+    padding: 22px; box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+  }
+  label { font-size: 13px; font-weight: 600; color: #475569; display: block; margin-bottom: 6px; }
+  input {
+    width: 100%; padding: 12px 14px; font-size: 16px; border: 1px solid #cbd5e1;
+    border-radius: 9px; margin-bottom: 16px; outline: none; background: #fff; color: #1e293b;
+  }
+  input:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79, 70, 229, .12); }
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
+  button {
+    width: 100%; padding: 14px; font-size: 16px; font-weight: 600; color: #fff;
+    background: #4f46e5; border: 0; border-radius: 9px; cursor: pointer;
+  }
+  button:disabled { opacity: .6; cursor: wait; }
+  #status { margin: 18px 0 0; color: #64748b; font-size: 14px; display: none; }
+  #itinerary { margin-top: 22px; display: none; }
+  #itinerary .card { line-height: 1.65; font-size: 15.5px; }
+  #itinerary h2 { font-size: 18px; color: #4f46e5; margin: 18px 0 8px; }
+  #itinerary h2:first-child { margin-top: 0; }
+  #itinerary ul { padding-left: 20px; }
+  #itinerary li { margin-bottom: 7px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4f46e5;
+         margin-right: 8px; animation: pulse 1s infinite alternate; }
+  @keyframes pulse { from { opacity: .3 } to { opacity: 1 } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>AI Trip Planner <span class="spark">✦</span></h1>
+  <p class="sub">Describe the trip. Get a real plan, day by day.</p>
+  <div class="card">
+    <div class="row">
+      <div>
+        <label for="dest">Where to?</label>
+        <input id="dest" placeholder="Kyoto" autocomplete="off">
+      </div>
+      <div style="max-width:130px">
+        <label for="days">Days</label>
+        <input id="days" placeholder="3" autocomplete="off">
+      </div>
+    </div>
+    <button id="go">Generate my trip</button>
+    <p id="status"><span class="dot"></span>Planning your days...</p>
+  </div>
+  <div id="itinerary"><div class="card" id="out"></div></div>
+</div>
+<script>
+  const API_KEY = "GEMINI_KEY_HERE";
+  const btn = document.getElementById("go");
+  const status = document.getElementById("status");
+  const box = document.getElementById("itinerary");
+  const out = document.getElementById("out");
+
+  function mdToHtml(md) {
+    return md
+      .replace(/^### (.*)$/gm, "<h2>$1</h2>")
+      .replace(/^## (.*)$/gm, "<h2>$1</h2>")
+      .replace(/^\*\*(.*)\*\*$/gm, "<h2>$1</h2>")
+      .replace(/\*\*(.*?)\*\*/g, "<b>$1</b>")
+      .replace(/^[-*] (.*)$/gm, "<li>$1</li>")
+      .replace(/(<li>[\s\S]*?<\/li>)(?!\s*<li>)/g, "<ul>$1</ul>")
+      .replace(/\n{2,}/g, "<br>");
+  }
+
+  btn.addEventListener("click", async () => {
+    const dest = document.getElementById("dest").value || "Kyoto";
+    const days = document.getElementById("days").value || "3";
+    btn.disabled = true; status.style.display = "block"; box.style.display = "none"; out.innerHTML = "";
+    const body = {
+      contents: [{ parts: [{ text:
+        `Plan a ${days}-day trip to ${dest}. For each day give a morning activity, an afternoon activity, an evening activity, and a restaurant recommendation, with specific real places. Format: a heading per day like "### Day 1", then 4 short bullet points. No intro or outro text, start directly with Day 1.` }] }]
+    };
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse&key=${API_KEY}`;
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let md = "", buf = "";
+    status.style.display = "none"; box.style.display = "block";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split("\n"); buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const chunk = JSON.parse(line.slice(6));
+          const t = chunk.candidates?.[0]?.content?.parts?.[0]?.text || "";
+          if (t) { md += t; out.innerHTML = mdToHtml(md); window.scrollTo(0, document.body.scrollHeight); }
+        } catch (e) {}
+      }
+    }
+    btn.disabled = false;
+  });
+</script>
+</body>
+</html>
