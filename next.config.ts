@@ -2,6 +2,22 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
+  /*
+   * Produces .next/standalone: the app plus only the dependencies it actually
+   * needs at run time, with its own server.js. This is what the Dockerfile
+   * copies, and it is the difference between a ~200MB image and a ~700MB one.
+   *
+   * Off on Vercel, and that is not a preference. Vercel runs a step of its own
+   * after next build, and standalone mode moves the file-tracing manifest that
+   * step reads, so the deploy dies at the very end on a missing
+   * next-server.js.nft.json. Vercel already does this tracing itself; asking
+   * for it twice buys nothing and costs you the deploy.
+   *
+   * One repo, two deployment targets, and this is the single config value that
+   * has to differ between them.
+   */
+  output: process.env.VERCEL ? undefined : "standalone",
+
   images: {
     remotePatterns: [
       {

@@ -1,0 +1,46 @@
+# The whole app on your own machine, including a real database.
+#
+#   docker compose up
+#
+# The point is that a new person can run this without an account anywhere.
+# Postgres is a real Postgres rather than a hosted one, so nothing about the
+# database depends on the internet being up or a free tier still existing.
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      # Points at the postgres service below rather than at Neon.
+      DATABASE_URL: postgresql://trip:trip@db:5432/tripplanner
+      # Everything else is read from a local .env file if you have one.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-}
+    depends_on:
+      db:
+        # Waits for postgres to answer, not merely to exist. Without this the
+        # app starts first, fails to connect, and exits before the database is
+        # ready to talk to anyone.
+        condition: service_healthy
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: trip
+      POSTGRES_PASSWORD: trip
+      POSTGRES_DB: tripplanner
+    ports:
+      # Exposed so `npm run db:studio` on the host can reach it.
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trip -d tripplanner"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
