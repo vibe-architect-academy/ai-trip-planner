@@ -13,7 +13,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.mts",
     "db:studio": "drizzle-kit studio",
-    "evals": "tsx scripts/run-evals.ts"
+    "evals": "tsx scripts/run-evals.ts",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.7.4",
@@ -31,6 +32,7 @@
     "stripe": "^22.5.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "24.10.1",
     "@types/react": "19.2.8",
