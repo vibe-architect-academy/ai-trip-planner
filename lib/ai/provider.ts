@@ -22,6 +22,18 @@ export type TaskKind = "itinerary" | "classify" | "summarize";
 
 export type ProviderName = "gemini" | "groq" | "cerebras" | "deepseek";
 
+/**
+ * One model, and anything only it needs in the request body.
+ *
+ * Per model rather than per provider, because "OpenAI-compatible" does not
+ * mean every model accepts the same options. reasoning_effort is required by
+ * the gpt-oss models and rejected outright by compound.
+ */
+type ModelSpec = {
+  id: string;
+  extraBody?: Record<string, unknown>;
+};
+
 type Provider = {
   /**
    * How to talk to it. Gemini has its own request shape; everyone else here
@@ -30,18 +42,18 @@ type Provider = {
   kind: "gemini" | "openai";
   baseUrl: string;
   envKey: string;
-  /** Which model handles which task. See right-sizing, above. */
-  models: Record<TaskKind, string>;
+  /**
+   * Which models handle which task, in fallback order.
+   *
+   * More than one, because rate limits are per model. Groq gives each its own
+   * bucket, so falling from one to the next multiplies the free capacity
+   * without involving a second vendor: roughly 80 itineraries a day on the
+   * flagship, another 80 on the small one, and 250 more on compound, which
+   * has no daily token cap at all.
+   */
+  models: Record<TaskKind, ModelSpec[]>;
   /** Rough cost per million input tokens, so the logs can say what was spent. */
   inputCostPerMillion: number;
-  /**
-   * Extra fields merged into the request body for this provider only.
-   *
-   * Needed because "OpenAI-compatible" means the shape matches, not that every
-   * option does. Sending a provider a parameter it has never heard of is how
-   * you turn a working call into a 400.
-   */
-  extraBody?: Record<string, unknown>;
 };
 
 /**
@@ -54,9 +66,9 @@ const PROVIDERS: Record<ProviderName, Provider> = {
     baseUrl: "https://generativelanguage.googleapis.com/v1beta",
     envKey: "GEMINI_API_KEY",
     models: {
-      itinerary: "gemini-2.5-flash",
-      classify: "gemini-2.5-flash-lite",
-      summarize: "gemini-2.5-flash-lite",
+      itinerary: [{ id: "gemini-2.5-flash" }],
+      classify: [{ id: "gemini-2.5-flash-lite" }],
+      summarize: [{ id: "gemini-2.5-flash-lite" }],
     },
     inputCostPerMillion: 0.3,
   },
@@ -65,38 +77,45 @@ const PROVIDERS: Record<ProviderName, Provider> = {
     baseUrl: "https://api.groq.com/openai/v1",
     envKey: "GROQ_API_KEY",
     models: {
-      itinerary: "openai/gpt-oss-120b",
-      // The 20b is several times cheaper and twice as fast, which is the
-      // right trade for a label and a sentence.
-      classify: "openai/gpt-oss-20b",
-      summarize: "openai/gpt-oss-20b",
+      /*
+       * Quality first, then headroom. The flagship writes the best itinerary
+       * and has the tightest daily token budget, so when it runs out the
+       * small model takes over, and compound last because it is slower but
+       * has no daily token cap.
+       *
+       * Two models were tried and rejected. qwen3.6-27b ignores the heading
+       * format entirely and returns zero parseable days. allam-2-7b formats
+       * perfectly and invents facts: it placed Kabuki-za in Kyoto when it is
+       * in Tokyo, and put Kikunoi in the wrong district. Correct shape with
+       * wrong content is worse than an obvious failure, because nothing
+       * catches it.
+       */
+      itinerary: [
+        { id: "openai/gpt-oss-120b", extraBody: { reasoning_effort: "low" } },
+        { id: "openai/gpt-oss-20b", extraBody: { reasoning_effort: "low" } },
+        // Rejects reasoning_effort, hence no extraBody.
+        { id: "groq/compound" },
+      ],
+      classify: [
+        { id: "openai/gpt-oss-20b", extraBody: { reasoning_effort: "low" } },
+        { id: "openai/gpt-oss-120b", extraBody: { reasoning_effort: "low" } },
+      ],
+      summarize: [
+        { id: "openai/gpt-oss-20b", extraBody: { reasoning_effort: "low" } },
+      ],
     },
     inputCostPerMillion: 0.15,
-    /*
-     * These are reasoning models, and the reasoning counts against max_tokens
-     * while landing in a separate field the app never reads.
-     *
-     * Left alone, a 40 token budget was spent entirely on thinking: HTTP 200,
-     * finish_reason "length", and an empty string for content. Nothing errors.
-     * You get a successful call that produced nothing, which is the worst
-     * shape a failure can take.
-     *
-     * "low" cuts it to single or double digit tokens and the answers arrive
-     * intact. Found by reading usage.completion_tokens_details, not by
-     * trusting the 200.
-     */
-    extraBody: { reasoning_effort: "low" },
   },
   cerebras: {
     kind: "openai",
     baseUrl: "https://api.cerebras.ai/v1",
     envKey: "CEREBRAS_API_KEY",
     models: {
-      itinerary: "gpt-oss-120b",
+      itinerary: [{ id: "gpt-oss-120b" }],
       // The small tasks are a label and a sentence. A 120b model here would be
       // a cannon opening a letter, and it spends the same rate limit.
-      classify: "gemma-4-31b",
-      summarize: "gemma-4-31b",
+      classify: [{ id: "gemma-4-31b" }],
+      summarize: [{ id: "gemma-4-31b" }],
     },
     inputCostPerMillion: 0,
   },
@@ -105,9 +124,9 @@ const PROVIDERS: Record<ProviderName, Provider> = {
     baseUrl: "https://api.deepseek.com",
     envKey: "DEEPSEEK_API_KEY",
     models: {
-      itinerary: "deepseek-chat",
-      classify: "deepseek-chat",
-      summarize: "deepseek-chat",
+      itinerary: [{ id: "deepseek-chat" }],
+      classify: [{ id: "deepseek-chat" }],
+      summarize: [{ id: "deepseek-chat" }],
     },
     inputCostPerMillion: 0.27,
   },
@@ -190,18 +209,20 @@ export function ladderFor(task: TaskKind): ModelChoice[] {
   return providerOrder()
     .map((name) => ({ name, apiKey: keyFor(name) }))
     .filter((entry): entry is { name: ProviderName; apiKey: string } => Boolean(entry.apiKey))
-    .map(({ name, apiKey }) => {
+    .flatMap(({ name, apiKey }) => {
       const provider = PROVIDERS[name];
-      return {
+      // One rung per model, not per provider. Rate limits are per model, so a
+      // provider with three usable models is three chances, not one.
+      return provider.models[task].map((spec) => ({
         provider: name,
         kind: provider.kind,
         baseUrl: provider.baseUrl,
-        model: provider.models[task],
+        model: spec.id,
         apiKey,
         maxOutputTokens: MAX_OUTPUT_TOKENS[task],
         inputCostPerMillion: provider.inputCostPerMillion,
-        extraBody: provider.extraBody ?? {},
-      };
+        extraBody: spec.extraBody ?? {},
+      }));
     });
 }
 
