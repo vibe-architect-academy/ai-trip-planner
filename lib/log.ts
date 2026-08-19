@@ -20,9 +20,9 @@ export function logError(action: string, error: unknown, details: Details = {}) 
    * monitoring; it is a diary you write for an audience of nobody.
    *
    * Guarded, because the error reporter must never be the thing that throws.
-   * Outside a Next runtime, in a script or a test, captureException may not
-   * exist at all, and an unguarded call turns every handled error into an
-   * unhandled one while hiding the original fault behind a crash in the code
+   * Outside a Next runtime, in a plain script or a test, captureException may
+   * not exist at all, and an unguarded call turns every handled error into an
+   * unhandled one and hides the original fault behind a crash in the code
    * that was supposed to record it.
    */
   try {

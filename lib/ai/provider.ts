@@ -20,7 +20,7 @@
 
 export type TaskKind = "itinerary" | "classify" | "summarize";
 
-export type ProviderName = "gemini" | "cerebras" | "deepseek";
+export type ProviderName = "gemini" | "groq" | "cerebras" | "deepseek";
 
 type Provider = {
   /**
@@ -34,6 +34,14 @@ type Provider = {
   models: Record<TaskKind, string>;
   /** Rough cost per million input tokens, so the logs can say what was spent. */
   inputCostPerMillion: number;
+  /**
+   * Extra fields merged into the request body for this provider only.
+   *
+   * Needed because "OpenAI-compatible" means the shape matches, not that every
+   * option does. Sending a provider a parameter it has never heard of is how
+   * you turn a working call into a 400.
+   */
+  extraBody?: Record<string, unknown>;
 };
 
 /**
@@ -51,6 +59,33 @@ const PROVIDERS: Record<ProviderName, Provider> = {
       summarize: "gemini-2.5-flash-lite",
     },
     inputCostPerMillion: 0.3,
+  },
+  groq: {
+    kind: "openai",
+    baseUrl: "https://api.groq.com/openai/v1",
+    envKey: "GROQ_API_KEY",
+    models: {
+      itinerary: "openai/gpt-oss-120b",
+      // The 20b is several times cheaper and twice as fast, which is the
+      // right trade for a label and a sentence.
+      classify: "openai/gpt-oss-20b",
+      summarize: "openai/gpt-oss-20b",
+    },
+    inputCostPerMillion: 0.15,
+    /*
+     * These are reasoning models, and the reasoning counts against max_tokens
+     * while landing in a separate field the app never reads.
+     *
+     * Left alone, a 40 token budget was spent entirely on thinking: HTTP 200,
+     * finish_reason "length", and an empty string for content. Nothing errors.
+     * You get a successful call that produced nothing, which is the worst
+     * shape a failure can take.
+     *
+     * "low" cuts it to single or double digit tokens and the answers arrive
+     * intact. Found by reading usage.completion_tokens_details, not by
+     * trusting the 200.
+     */
+    extraBody: { reasoning_effort: "low" },
   },
   cerebras: {
     kind: "openai",
@@ -79,22 +114,40 @@ const PROVIDERS: Record<ProviderName, Provider> = {
 };
 
 /** Output ceilings by task, so a one-word answer cannot bill like an essay. */
+/*
+ * Ceilings, with headroom for reasoning tokens.
+ *
+ * The cheap tasks want a word and a sentence, so 20 and 80 looked generous.
+ * On a reasoning model they are not: the thinking is billed against the same
+ * budget and silently leaves nothing for the answer. These are sized so the
+ * reasoning fits and the answer still arrives, and they remain small enough
+ * that a one-word reply cannot bill like an essay.
+ */
 const MAX_OUTPUT_TOKENS: Record<TaskKind, number> = {
   itinerary: 2000,
-  classify: 20,
-  summarize: 80,
+  classify: 250,
+  summarize: 250,
 };
 
 /**
- * The default order matches what the course teaches: Gemini first, then a free
- * fallback, then a paid floor. A deployment whose Google account has billing
- * enabled has no free tier at all and should set AI_PROVIDER_ORDER to put a
- * genuinely free provider first.
+ * The default order matches what the course teaches: Gemini first, then the
+ * alternatives, then a paid floor.
+ *
+ * Worth knowing before you rely on any of them being free. Gemini's free tier
+ * exists only on a Google Cloud project with billing disabled. Cerebras looks
+ * free and is not: with a zero balance every call returns 402, whatever the
+ * quotas on its limits page suggest. Test a provider with one real request
+ * before believing a pricing page, including the ones above.
  */
-const DEFAULT_ORDER: ProviderName[] = ["gemini", "cerebras", "deepseek"];
+const DEFAULT_ORDER: ProviderName[] = ["gemini", "groq", "cerebras", "deepseek"];
 
 function isProviderName(value: string): value is ProviderName {
-  return value === "gemini" || value === "cerebras" || value === "deepseek";
+  return (
+    value === "gemini" ||
+    value === "groq" ||
+    value === "cerebras" ||
+    value === "deepseek"
+  );
 }
 
 /** The configured order, ignoring anything unrecognised rather than crashing. */
@@ -124,6 +177,7 @@ export type ModelChoice = {
   apiKey: string;
   maxOutputTokens: number;
   inputCostPerMillion: number;
+  extraBody: Record<string, unknown>;
 };
 
 /**
@@ -146,6 +200,7 @@ export function ladderFor(task: TaskKind): ModelChoice[] {
         apiKey,
         maxOutputTokens: MAX_OUTPUT_TOKENS[task],
         inputCostPerMillion: provider.inputCostPerMillion,
+        extraBody: provider.extraBody ?? {},
       };
     });
 }

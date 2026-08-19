@@ -92,6 +92,7 @@ async function* openAiChunks(
       stream: true,
       max_tokens: choice.maxOutputTokens,
       temperature: 0.7,
+      ...choice.extraBody,
       messages: [
         { role: "system", content: ITINERARY_SYSTEM_PROMPT },
         { role: "user", content: userPrompt(destination, days, language) },

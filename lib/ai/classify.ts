@@ -76,6 +76,7 @@ async function askOpenAiCompatible(choice: ModelChoice, prompt: string): Promise
       messages: [{ role: "user", content: prompt }],
       max_tokens: choice.maxOutputTokens,
       temperature: 0.2,
+      ...choice.extraBody,
       // This dialect has a JSON mode but no schema, so the shape is described
       // in the prompt and validated below. Trust the check, not the promise.
       response_format: { type: "json_object" },

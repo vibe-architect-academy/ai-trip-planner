@@ -18,43 +18,10 @@
  * nothing extra to install.
  */
 
-import { readFileSync } from "node:fs";
+import { loadEnv } from "./load-env.mts";
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { migrate } from "drizzle-orm/neon-http/migrator";
-
-/**
- * Loads .env.local without a dependency.
- *
- * Next does this for you at runtime, but a standalone script gets nothing, so
- * without this the script reads an undefined DATABASE_URL and reports a
- * missing database on a machine where the database is configured perfectly.
- */
-function loadEnv(file = ".env.local") {
-  let text: string;
-  try {
-    text = readFileSync(file, "utf8");
-  } catch {
-    return;
-  }
-
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-
-    const key = trimmed.slice(0, eq).trim();
-    // Strip surrounding quotes, which Neon includes and which are not part
-    // of the value.
-    const value = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, "");
-
-    // A real environment variable always wins over the file, so CI and the
-    // hosting platform stay in charge.
-    if (!process.env[key]) process.env[key] = value;
-  }
-}
 
 async function main() {
   loadEnv();

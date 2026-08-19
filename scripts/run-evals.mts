@@ -14,9 +14,10 @@
  * admitting it cannot.
  */
 
-import { EVAL_CASES } from "../lib/ai/evals/cases";
-import { streamItinerary, checkItinerary } from "../lib/ai/itinerary";
-import { isAiConfigured } from "../lib/ai/provider";
+import { loadEnv } from "./load-env.mts";
+import { EVAL_CASES } from "@/lib/ai/evals/cases";
+import { streamItinerary, checkItinerary } from "@/lib/ai/itinerary";
+import { isAiConfigured } from "@/lib/ai/provider";
 
 async function collect(stream: AsyncIterable<string>): Promise<string> {
   let text = "";
@@ -25,6 +26,8 @@ async function collect(stream: AsyncIterable<string>): Promise<string> {
 }
 
 async function main() {
+  loadEnv();
+
   if (!isAiConfigured()) {
     console.error("No AI provider configured. Set GEMINI_API_KEY or DEEPSEEK_API_KEY.");
     process.exit(1);
