@@ -18,6 +18,20 @@ import { NextResponse } from "next/server";
  */
 
 const isPublicRoute = createRouteMatcher([
+  /*
+   * The landing page, and the route behind it.
+   *
+   * A demo that opens with a sign-up form is asking to be trusted before it
+   * has been seen. So a visitor can plan a trip here with no account at all;
+   * what they get is a preview, which expires and belongs to nobody until they
+   * sign in and claim it.
+   *
+   * "Public" is not "free for all": /api/preview is rate limited by address
+   * and has a daily ceiling across everyone, because every call spends real
+   * money and the caller has no account to suspend.
+   */
+  "/",
+  "/api/preview",
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/suspended",

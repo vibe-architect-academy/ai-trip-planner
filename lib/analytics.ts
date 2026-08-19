@@ -23,6 +23,8 @@ export const EVENTS = {
   tripShared: "trip_shared",
   upgraded: "upgraded_to_premium",
   limitHit: "hit_free_limit",
+  /** An anonymous preview turned into an owned trip. The whole funnel, in one event. */
+  previewClaimed: "preview_claimed",
 } as const;
 
 export type EventName = (typeof EVENTS)[keyof typeof EVENTS];

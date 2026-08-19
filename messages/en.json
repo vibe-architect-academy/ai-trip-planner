@@ -23,5 +23,9 @@
   "photos.empty": "No photos yet. JPEG or PNG, up to 4MB each.",
   "error.generic": "Something went wrong. Try again.",
   "error.offline": "We could not reach the server. Check your connection and try again.",
-  "language.label": "Language"
+  "language.label": "Language",
+  "preview.prompt": "Like it? Sign in and it is yours, still here tomorrow.",
+  "preview.save": "Save this trip",
+  "preview.claiming": "Saving it to your account...",
+  "preview.expired": "That trip has expired. Plan it again and it is yours."
 }

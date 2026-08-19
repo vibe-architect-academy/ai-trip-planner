@@ -23,5 +23,9 @@
   "photos.empty": "Aucune photo pour l'instant. JPEG ou PNG, 4 Mo maximum par photo.",
   "error.generic": "Une erreur est survenue. Réessayez.",
   "error.offline": "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez.",
-  "language.label": "Langue"
+  "language.label": "Langue",
+  "preview.prompt": "Envie de le garder ? Connectez-vous, il sera encore la demain.",
+  "preview.save": "Enregistrer ce voyage",
+  "preview.claiming": "Enregistrement dans votre compte...",
+  "preview.expired": "Ce voyage a expire. Relancez-le et il sera a vous."
 }

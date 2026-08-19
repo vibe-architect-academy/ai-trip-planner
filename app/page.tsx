@@ -27,6 +27,9 @@ export default async function Home() {
           savedRest: t("trip.savedRest"),
           genericError: t("error.generic"),
           offlineError: t("error.offline"),
+          previewPrompt: t("preview.prompt"),
+          previewSave: t("preview.save"),
+          previewClaiming: t("preview.claiming"),
         }}
       />
     </main>
