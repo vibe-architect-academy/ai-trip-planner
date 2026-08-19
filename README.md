@@ -28,6 +28,13 @@ the browser, which is roughly what a weekend of vibe coding produces.
 Everything above it exists because that version broke in a new and interesting
 way.
 
+**There are more commits than tags, and that is deliberate.** The 34 tagged
+commits are the course. The handful after `lesson-34` are what happened when
+this thing was actually deployed and left running: a landing page that works
+before you have an account, a nightly sweep for data that expired, a fix for a
+queue that reported success while doing nothing. They are not lessons, so they
+are not tagged as lessons. `git log lesson-34..main` is exactly the list.
+
 ## The journey, in one table
 
 | | The wall | What closed it |
