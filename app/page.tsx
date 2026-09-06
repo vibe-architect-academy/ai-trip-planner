@@ -32,6 +32,37 @@ export default async function Home() {
           previewClaiming: t("preview.claiming"),
         }}
       />
+      {/*
+        Where this app came from. It is the worked example of a course, and a
+        visitor who likes what they see should be able to find the course
+        without guessing. Plain links, no tracking parameters: the referrer
+        already says where they came from.
+      */}
+      <footer className="mt-12 border-t border-slate-200 pt-6 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
+        <p>
+          {t("footer.builtWith")}{" "}
+          <a
+            href="https://archvibe.app/"
+            className="focus-ring rounded underline hover:text-indigo-600 dark:hover:text-indigo-400"
+          >
+            {t("footer.course")}
+          </a>
+          {" · "}
+          <a
+            href="https://archvibe.app/lessons/youve-outgrown-lovable/"
+            className="focus-ring rounded underline hover:text-indigo-600 dark:hover:text-indigo-400"
+          >
+            {t("footer.freeLesson")}
+          </a>
+          {" · "}
+          <a
+            href="https://github.com/vibe-architect-academy/ai-trip-planner"
+            className="focus-ring rounded underline hover:text-indigo-600 dark:hover:text-indigo-400"
+          >
+            {t("footer.source")}
+          </a>
+        </p>
+      </footer>
     </main>
   );
 }
