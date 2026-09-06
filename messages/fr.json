@@ -27,5 +27,9 @@
   "preview.prompt": "Envie de le garder ? Connectez-vous, il sera encore la demain.",
   "preview.save": "Enregistrer ce voyage",
   "preview.claiming": "Enregistrement dans votre compte...",
-  "preview.expired": "Ce voyage a expire. Relancez-le et il sera a vous."
+  "preview.expired": "Ce voyage a expire. Relancez-le et il sera a vous.",
+  "footer.builtWith": "Construit en suivant le cours ArchVibe, une leçon par commit.",
+  "footer.course": "Le cours",
+  "footer.freeLesson": "Première leçon gratuite",
+  "footer.source": "Code source"
 }

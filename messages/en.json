@@ -27,5 +27,9 @@
   "preview.prompt": "Like it? Sign in and it is yours, still here tomorrow.",
   "preview.save": "Save this trip",
   "preview.claiming": "Saving it to your account...",
-  "preview.expired": "That trip has expired. Plan it again and it is yours."
+  "preview.expired": "That trip has expired. Plan it again and it is yours.",
+  "footer.builtWith": "Built by taking the ArchVibe course, one lesson per commit.",
+  "footer.course": "The course",
+  "footer.freeLesson": "Free first lesson",
+  "footer.source": "Source code"
 }

@@ -63,6 +63,16 @@ const isPublicRoute = createRouteMatcher([
   "/privacy",
   // Uptime monitors do not sign in.
   "/api/health",
+  /*
+   * What crawlers and link scrapers ask for first. Behind the sign-in wall
+   * these answered with a redirect to Clerk: Google could not read the robots
+   * file that tells it what to skip, Bing never saw the sitemap, and a link
+   * pasted into a chat got no preview image. None of these callers holds a
+   * session, and none of these files holds anything private.
+   */
+  "/robots.txt",
+  "/sitemap.xml",
+  "/opengraph-image(.*)",
 ]);
 
 const isAdminRoute = createRouteMatcher(["/admin(.*)"]);
